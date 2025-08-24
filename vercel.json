@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "name": "genin-invoice-processor",
+  "builds": [
+    {
+      "src": "packages/web/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "packages/web/dist"
+      }
+    },
+    {
+      "src": "packages/api/src/minimal-server.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["packages/api/src/**"]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/packages/api/src/minimal-server.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/packages/web/dist/$1"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "packages/api/src/minimal-server.ts": {
+      "maxDuration": 30
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "skipLibCheck": true,
+    "noEmitOnError": false,
+    "noImplicitReturns": false
+  },
+  "include": [
+    "src/minimal-server.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/routes/**",
+    "src/services/**",
+    "src/db/**",
+    "src/index.ts",
+    "src/minimal-server-clean.ts",
+    "src/test-callback.ts"
+  ]
+}

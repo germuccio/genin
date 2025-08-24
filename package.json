@@ -1,0 +1,41 @@
+{
+  "name": "invoice-processing-app",
+  "version": "1.0.0",
+  "description": "TDD-built invoice processing application with Visma eAccounting integration",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=packages/api\" \"npm run dev --workspace=packages/web\"",
+    "build": "npm run build --workspace=packages/api && npm run build --workspace=packages/web",
+    "test": "npm run test --workspace=packages/api && npm run test:unit --workspace=packages/web",
+    "install:all": "npm install && npm install --workspace=packages/shared && npm install --workspace=packages/api && npm install --workspace=packages/web",
+    "clean": "rm -rf packages/*/node_modules packages/*/dist",
+    "migrate": "npm run migrate --workspace=packages/api",
+    "lint": "npm run lint --workspace=packages/api && npm run lint --workspace=packages/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "keywords": [
+    "invoice",
+    "processing",
+    "visma",
+    "eaccounting",
+    "excel",
+    "pdf",
+    "vue3",
+    "typescript",
+    "nodejs",
+    "tdd"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
+
+
