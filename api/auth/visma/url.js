@@ -26,8 +26,16 @@ module.exports = async (req, res) => {
     acr_values: `service:${serviceId}`,
   });
 
-  const auth_url = `https://identity.vismaonline.com/connect/authorize?${params.toString()}`;
-  return res.json({ auth_url, redirect_uri: redirectUri, state });
+  // Determine environment - if client_id looks like sandbox, use sandbox URLs
+  const isSandbox = clientId.includes('sandbox') || clientId.includes('test') || 
+                   req.headers['x-visma-environment'] === 'sandbox';
+  
+  const identityBaseUrl = isSandbox 
+    ? 'https://identity-sandbox.vismaonline.com' 
+    : 'https://identity.vismaonline.com';
+
+  const auth_url = `${identityBaseUrl}/connect/authorize?${params.toString()}`;
+  return res.json({ auth_url, redirect_uri: redirectUri, state, environment: isSandbox ? 'sandbox' : 'production' });
 };
 
 

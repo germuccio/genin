@@ -10,7 +10,8 @@ module.exports = async (req, res) => {
     environment: {
       VISMA_API_ENVIRONMENT: 'production',
       VISMA_API_BASE_URL: 'https://eaccountingapi.vismaonline.com',
-      VISMA_IDENTITY_URL: 'https://identity.vismaonline.com'
+      VISMA_IDENTITY_URL: 'https://identity.vismaonline.com',
+      note: 'Environment auto-detected from client_id. Sandbox client_id -> sandbox URLs'
     }
   });
 };
