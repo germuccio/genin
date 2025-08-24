@@ -1838,4 +1838,3 @@ if (httpsOptions) {
 
 // Export the app for Vercel serverless functions
 export default app;
-module.exports = app;
