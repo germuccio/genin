@@ -451,7 +451,7 @@ app.post('/api/visma/invoices/create-direct', async (req, res) => {
         
         if (!articleMapping || !articleMapping.ok) {
           throw new Error(`Article mapping missing. Please provide articleMapping with 'ok' article ID.`);
-        }uth
+        }
         
         const articleId = articleMapping.ok;
         
