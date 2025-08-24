@@ -22,6 +22,11 @@ build/
 .output/
 .vercel/
 
+# Root frontend assets (needed for Vercel)
+!index.html
+!assets/
+!test.html
+
 # Runtime data
 pids
 *.pid
