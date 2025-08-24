@@ -8,8 +8,6 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=packages/api\" \"npm run dev --workspace=packages/web\"",
-    "build": "npm run build --workspace=packages/api && npm run build --workspace=packages/web && npm run build:copy",
-    "build:copy": "rm -rf ./dist && cp -r packages/web/dist ./dist && cp -r packages/web/dist/* .",
     "test": "npm run test --workspace=packages/api && npm run test:unit --workspace=packages/web",
     "install:all": "npm install && npm install --workspace=packages/shared && npm install --workspace=packages/api && npm install --workspace=packages/web",
     "clean": "rm -rf packages/*/node_modules packages/*/dist ./dist",
