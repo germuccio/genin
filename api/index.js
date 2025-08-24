@@ -17,8 +17,12 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (!app) {
-    return res.status(500).json({ error: 'API server not available' });
+    return res.status(500).json({ error: 'API server not available', path: req.url });
   }
 
+  // Vercel strips /api from the URL, so we need to add it back
+  req.url = '/api' + req.url;
+  
+  console.log('Proxying request:', req.method, req.url);
   return app(req, res);
 };
