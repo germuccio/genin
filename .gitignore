@@ -67,7 +67,8 @@ jspm_packages/
 
 # Gatsby files
 .cache/
-public
+# Allow public for Vercel static output
+!public/
 
 # Vuepress build output
 .vuepress/dist
