@@ -1835,3 +1835,7 @@ if (httpsOptions) {
     console.log(`❌ This may not work with Visma - HTTPS required`);
   });
 }
+
+// Export the app for Vercel serverless functions
+export default app;
+module.exports = app;
