@@ -17,6 +17,7 @@ packages/web/.env
 
 # Build outputs
 dist/
+packages/*/dist/
 build/
 .output/
 .vercel/
