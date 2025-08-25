@@ -1,30 +1,10 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "packages/web/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    },
-    {
-      "src": "packages/api/src/minimal-server.ts",
-      "use": "@vercel/node"
+  "buildCommand": "cd packages/web && npm install --force && npm run build",
+  "outputDirectory": "packages/web/dist",
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30
     }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "packages/api/src/minimal-server.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "packages/web/dist/$1"
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production"
   }
 }
 

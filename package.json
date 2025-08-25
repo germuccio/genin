@@ -15,6 +15,9 @@
     "migrate": "npm run migrate --workspace=packages/api",
     "lint": "npm run lint --workspace=packages/api && npm run lint --workspace=packages/web"
   },
+  "dependencies": {
+    "axios": "^1.7.9"
+  },
   "devDependencies": {
     "concurrently": "^9.2.0"
   },
