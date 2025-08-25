@@ -18,19 +18,10 @@ module.exports = async (req, res) => {
     const presets = [
       {
         id: 1,
-        code: 'TRANSPORT',
-        name: 'Transport Service',
-        article_name: 'Transport/Levering',
-        unit_price_cents: 50000, // 500 NOK
-        currency: 'NOK',
-        vat_code: '25'
-      },
-      {
-        id: 2,
-        code: 'HANDLING',
-        name: 'Handling Fee',
-        article_name: 'Håndteringsgebyr',
-        unit_price_cents: 10000, // 100 NOK
+        code: 'OK',
+        name: 'Norsk import (+mva)',
+        article_name: 'Norsk import (+mva)',
+        unit_price_cents: 41400, // 414 NOK
         currency: 'NOK',
         vat_code: '25'
       }
