@@ -41,15 +41,20 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useVismaStore } from './stores/visma'
 import axios from 'axios'
+import { useVismaStore } from './stores/visma'
 
 const router = useRouter()
+const user = ref<{ username: string } | null>(null)
+const isAuthenticated = ref(false)
 const vismaStore = useVismaStore()
-const isAuthenticated = ref(true) // Assume authenticated since route guard handles this
-const environment = ref('')
+const apiMode = ref('TEST'); // Default to TEST
+
+const vismaStatusClass = computed(() => {
+  return vismaStore.isConnected ? 'status-connected' : 'status-disconnected'
+})
 
 const logout = async () => {
   try {
@@ -59,6 +64,30 @@ const logout = async () => {
     console.error('Logout failed:', error)
     // Force redirect anyway
     router.push({ name: 'login' })
+  }
+}
+
+const checkAuth = async () => {
+  try {
+    const response = await axios.get('/api/auth/me')
+    user.value = response.data
+    isAuthenticated.value = true
+  } catch (error) {
+    isAuthenticated.value = false
+    if (router.currentRoute.value.meta.requiresAuth) {
+      router.push({ name: 'login' })
+    }
+  }
+}
+
+const checkVismaStatus = async () => {
+  try {
+    const response = await axios.get('/api/auth/visma/status')
+    vismaStore.isConnected = response.data.connected
+    apiMode.value = response.data.apiMode || 'TEST';
+  } catch (error) {
+    console.error('Failed to check Visma status on load:', error)
+    vismaStore.isConnected = false
   }
 }
 
@@ -72,6 +101,8 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to get environment info:', error)
   }
+  await checkAuth()
+  await checkVismaStatus()
 })
 </script>
 

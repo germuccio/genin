@@ -1,12 +1,22 @@
 const { setCors } = require('../../_utils');
+const statusModule = require('../../_status');
 
 module.exports = async (req, res) => {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' });
-  // Clear cookie
-  res.setHeader('Set-Cookie', 'genin_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
-  return res.json({ success: true });
+
+  // Check authentication
+  if (req.method === 'DELETE') {
+    // Clear the in-memory store
+    statusModule.setTokens(null);
+    
+    // Clear the HttpOnly cookie by setting its expiration date to the past
+    res.setHeader('Set-Cookie', 'visma-tokens=; HttpOnly; Path=/; Secure; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+    
+    return res.json({ success: true, message: 'Successfully disconnected' });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
 };
 
 

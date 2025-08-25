@@ -16,7 +16,12 @@
     "lint": "npm run lint --workspace=packages/api && npm run lint --workspace=packages/web"
   },
   "dependencies": {
-    "axios": "^1.7.9"
+    "@types/express": "^4.17.21",
+    "@types/express-session": "^1.18.0",
+    "axios": "^1.7.2",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "pg": "^8.11.5"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

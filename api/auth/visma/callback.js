@@ -64,7 +64,11 @@ module.exports = async (req, res) => {
       // Exchange code for tokens
       const tokenData = await exchangeCodeForTokens(code);
       
-      // Store tokens in the status module
+      // Store tokens in a secure, HttpOnly cookie
+      const cookiePayload = JSON.stringify(tokenData);
+      res.setHeader('Set-Cookie', `visma-tokens=${cookiePayload}; HttpOnly; Path=/; Secure; SameSite=Strict; Max-Age=3600`);
+
+      // Also update the in-memory store for immediate use if needed by other functions
       statusModule.setTokens(tokenData);
       
       console.log('✅ Successfully exchanged code for tokens and stored in memory');
