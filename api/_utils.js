@@ -1,8 +1,41 @@
 const crypto = require('crypto');
+const session = require('express-session');
+const cookie = require('./_cookie');
 
 const APP_PASSWORD = process.env.APP_PASSWORD || '123456';
 const APP_SESSION_SECRET = process.env.APP_SESSION_SECRET || 'change-me-secret';
 
+// In-memory session store for local development
+const memoryStore = new session.MemoryStore();
+
+// This function is a simplified session middleware for serverless
+function getSession(req) {
+  const cookies = cookie.parse(req.headers.cookie || '');
+  if (cookies['visma-tokens']) {
+    try {
+      return JSON.parse(cookies['visma-tokens']);
+    } catch (e) {
+      console.error('Error parsing visma-tokens cookie:', e);
+      return null;
+    }
+  }
+  return null;
+}
+
+function getVismaTokensFromCookie(req) {
+  const cookies = cookie.parse(req.headers.cookie || '');
+  if (cookies['visma-tokens']) {
+    try {
+      return JSON.parse(cookies['visma-tokens']);
+    } catch (e) {
+      console.error('Error parsing visma-tokens cookie:', e);
+      return null;
+    }
+  }
+  return null;
+}
+
+// Function to set consistent CORS headers
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -26,24 +59,6 @@ function parseCookies(req) {
   return cookies;
 }
 
-function getSession(req) {
-  const cookies = parseCookies(req);
-  const raw = cookies['genin_session'];
-  if (!raw) return { authenticated: false };
-  const [payloadB64, signature] = raw.split('.');
-  if (!payloadB64 || !signature) return { authenticated: false };
-  try {
-    const json = Buffer.from(payloadB64, 'base64').toString('utf8');
-    const data = JSON.parse(json);
-    const expected = signSession(data);
-    const ok = crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
-    if (!ok) return { authenticated: false };
-    return { authenticated: true, data };
-  } catch {
-    return { authenticated: false };
-  }
-}
-
 function setSessionCookie(res, data) {
   const sig = signSession(data);
   const payload = Buffer.from(JSON.stringify(data)).toString('base64');
@@ -58,6 +73,7 @@ module.exports = {
   parseCookies,
   getSession,
   setSessionCookie,
+  getVismaTokensFromCookie
 };
 
 

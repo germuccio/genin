@@ -1,8 +1,5 @@
-const { setCors, getSession } = require('./_utils');
+const { setCors, getSession, getVismaTokensFromCookie } = require('./_utils');
 const axios = require('axios');
-
-// Import token management from status endpoint
-const statusModule = require('./auth/visma/status');
 
 module.exports = async (req, res) => {
   setCors(res);
@@ -16,11 +13,11 @@ module.exports = async (req, res) => {
 
   if (req.method === 'GET') {
     try {
-      // Get tokens from the status module
-      const tokens = statusModule.getTokens();
+      // Get tokens from the secure cookie
+      const tokens = getVismaTokensFromCookie(req);
       
       if (!tokens || !tokens.access_token) {
-        return res.status(401).json({ error: 'Not authenticated with Visma' });
+        return res.status(401).json({ error: 'Not authenticated with Visma. Please connect in Setup.' });
       }
 
       const apiBaseUrl = 'https://eaccountingapi.vismaonline.com';

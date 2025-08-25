@@ -1,3 +1,5 @@
+const { getVismaTokensFromCookie } = require('../_utils');
+
 module.exports = async (req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,6 +16,11 @@ module.exports = async (req, res) => {
   }
 
   try {
+    const tokens = getVismaTokensFromCookie(req);
+    if (!tokens || !tokens.access_token) {
+      return res.status(401).json({ error: 'Not authenticated with Visma' });
+    }
+
     const { customerDefaults, customerOverrides, articleMapping } = req.body;
     
     // Mock invoice creation response

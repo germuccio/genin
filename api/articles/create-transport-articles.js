@@ -1,4 +1,4 @@
-const { setCors, getSession } = require('../_utils');
+const { setCors, getSession, getVismaTokensFromCookie } = require('../_utils');
 const axios = require('axios');
 
 // Import token management from status endpoint
@@ -16,8 +16,8 @@ module.exports = async (req, res) => {
 
   if (req.method === 'POST') {
     try {
-      // Get tokens from the status module
-      const tokens = statusModule.getTokens();
+      // Get tokens from the secure cookie
+      const tokens = getVismaTokensFromCookie(req);
       
       if (!tokens || !tokens.access_token) {
         return res.status(401).json({ error: 'Not authenticated with Visma' });
