@@ -1,3 +1,5 @@
+import { Generated } from 'kysely';
+
 // Database table types for Kysely
 export interface Database {
   presets: PresetTable;
@@ -61,12 +63,12 @@ export interface InvoiceTable {
 }
 
 export interface VismaTokenTable {
-  id: number;
+  id: Generated<number>;
   company_name: string | null;
   access_token: string;
   refresh_token: string;
   expires_at: Date;
-  created_at: Date;
+  created_at: Generated<Date>;
 }
 
 

@@ -620,6 +620,8 @@ onMounted(async () => {
   // Load presets if connected
   if (vismaStore.isConnected) {
     loadPresets()
+    loadArticles()
+    loadArticleMapping()
   }
 
   // Load local Visma client credentials

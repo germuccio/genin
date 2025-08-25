@@ -8,6 +8,8 @@
     "build": "tsc --build tsconfig.prod.json",
     "build:simple": "tsx --build src/minimal-server.ts --outDir dist",
     "start": "node dist/minimal-server.js",
+    "vercel-build": "npm run build",
+    "migrate:prod": "node migrate-production.js",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "lint": "eslint src --ext .ts,.js --fix",

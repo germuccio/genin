@@ -10,6 +10,8 @@ import multer from 'multer';
 let XLSX: any;
 import path from 'path';
 import { createRequire } from 'module';
+import { VismaAuthService } from './services/visma-auth.js';
+import { db } from './db/database.js';
 
 // Initialize XLSX with require (works better than ES import)
 const require = createRequire(import.meta.url);
@@ -17,6 +19,9 @@ XLSX = require('xlsx');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize Visma Auth Service
+const vismaAuth = new VismaAuthService();
 
 // Global variables (in real app, use database)
 declare global {
@@ -256,10 +261,22 @@ app.post('/api/auth/visma/callback', async (req, res) => {
     if (clientSecret) opts.clientSecret = clientSecret
     const tokenData = await exchangeCodeForTokens(code, opts);
     
-    // Store tokens (for now, just in memory - in real app, store in database)
-    global.vismaTokens = tokenData;
+    // Try to store tokens in database, fallback to in-memory for local development
+    try {
+      await vismaAuth.storeTokens({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        expires_in: tokenData.expires_in,
+        token_type: tokenData.token_type,
+        scope: tokenData.scope
+      }, tokenData.company_name);
+      console.log('✅ Successfully exchanged code for tokens and stored in database');
+    } catch (dbError) {
+      console.log('📝 Database not available, storing tokens in memory for local development');
+    }
     
-    console.log('✅ Successfully exchanged code for tokens');
+    // Always store in global for local development compatibility
+    global.vismaTokens = tokenData;
     
     res.json({
       success: true,
@@ -277,16 +294,47 @@ app.post('/api/auth/visma/callback', async (req, res) => {
 });
 
 // Connection status endpoint
-app.get('/api/auth/visma/status', (req, res) => {
-  const isConnected = !!(global.vismaTokens && global.vismaTokens.access_token);
-  
-  if (isConnected) {
-    res.json({
-      connected: true,
-      company: global.vismaTokens?.company_name || 'Connected Company',
-      expires_at: global.vismaTokens?.expires_at || null
-    });
-  } else {
+app.get('/api/auth/visma/status', async (req, res) => {
+  try {
+    // Try database first, fallback to in-memory tokens
+    let hasValidTokens = false;
+    let tokenInfo = null;
+    
+    try {
+      hasValidTokens = await vismaAuth.hasValidTokens();
+      if (hasValidTokens) {
+        const tokenRecord = await db
+          .selectFrom('visma_tokens')
+          .selectAll()
+          .orderBy('created_at', 'desc')
+          .limit(1)
+          .executeTakeFirst();
+        tokenInfo = tokenRecord;
+      }
+    } catch (dbError) {
+      // Database not available, check in-memory tokens
+      console.log('📝 Database not available, using in-memory tokens for local development');
+      hasValidTokens = !!(global.vismaTokens && global.vismaTokens.access_token);
+      if (hasValidTokens) {
+        tokenInfo = global.vismaTokens;
+      }
+    }
+    
+    if (hasValidTokens && tokenInfo) {
+      res.json({
+        connected: true,
+        company: tokenInfo.company_name || 'Connected Company',
+        expires_at: tokenInfo.expires_at || null
+      });
+    } else {
+      res.json({
+        connected: false,
+        company: null,
+        expires_at: null
+      });
+    }
+  } catch (error) {
+    console.error('Error checking Visma status:', error);
     res.json({
       connected: false,
       company: null,
@@ -296,9 +344,21 @@ app.get('/api/auth/visma/status', (req, res) => {
 });
 
 // Disconnect endpoint
-app.delete('/api/auth/visma/disconnect', (req, res) => {
-  global.vismaTokens = null;
-  res.json({ success: true });
+app.delete('/api/auth/visma/disconnect', async (req, res) => {
+  try {
+    // Delete all tokens from database
+    await db
+      .deleteFrom('visma_tokens')
+      .execute();
+    
+    // Clear global tokens for backward compatibility
+    global.vismaTokens = null;
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error disconnecting from Visma:', error);
+    res.status(500).json({ success: false, error: 'Failed to disconnect' });
+  }
 });
 
 
@@ -1500,15 +1560,28 @@ app.get('/callback', async (req, res) => {
 
 // New endpoint to get all articles from Visma
 app.get('/api/articles', async (req, res) => {
-  if (!global.vismaTokens || !global.vismaTokens.access_token) {
-    return res.status(401).json({ error: 'Not authenticated with Visma' });
-  }
-
   try {
+    let accessToken = null;
+    
+    // Try database first, fallback to in-memory tokens
+    try {
+      accessToken = await vismaAuth.getValidAccessToken();
+    } catch (dbError) {
+      // Database not available, use in-memory tokens
+      console.log('📝 Database not available, using in-memory tokens for articles');
+      if (global.vismaTokens && global.vismaTokens.access_token) {
+        accessToken = global.vismaTokens.access_token;
+      }
+    }
+    
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Not authenticated with Visma' });
+    }
+
     const apiBaseUrl = VISMA_API_BASE_URL; // Use production for articles
     const response = await axios.get(`${apiBaseUrl}/v2/articles`, {
       headers: {
-        'Authorization': `Bearer ${global.vismaTokens.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       }
     });
@@ -1521,14 +1594,27 @@ app.get('/api/articles', async (req, res) => {
 
 // New endpoint to create dedicated transport service articles
 app.post('/api/articles/create-transport-articles', async (req, res) => {
-  if (!global.vismaTokens || !global.vismaTokens.access_token) {
-    return res.status(401).json({ error: 'Not authenticated with Visma' });
-  }
-
   try {
+    let accessToken = null;
+    
+    // Try database first, fallback to in-memory tokens
+    try {
+      accessToken = await vismaAuth.getValidAccessToken();
+    } catch (dbError) {
+      // Database not available, use in-memory tokens
+      console.log('📝 Database not available, using in-memory tokens for create articles');
+      if (global.vismaTokens && global.vismaTokens.access_token) {
+        accessToken = global.vismaTokens.access_token;
+      }
+    }
+    
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Not authenticated with Visma' });
+    }
+
     const apiBaseUrl = VISMA_API_BASE_URL;
     const headers = {
-      'Authorization': `Bearer ${global.vismaTokens.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     };
 
@@ -1745,13 +1831,26 @@ app.delete('/api/visma/invoices/bulk-delete-drafts', async (req, res) => {
 // Get current article mapping status
 app.get('/api/articles/mapping-status', async (req, res) => {
   try {
-    if (!global.vismaTokens || !global.vismaTokens.access_token) {
+    let accessToken = null;
+    
+    // Try database first, fallback to in-memory tokens
+    try {
+      accessToken = await vismaAuth.getValidAccessToken();
+    } catch (dbError) {
+      // Database not available, use in-memory tokens
+      console.log('📝 Database not available, using in-memory tokens for mapping status');
+      if (global.vismaTokens && global.vismaTokens.access_token) {
+        accessToken = global.vismaTokens.access_token;
+      }
+    }
+    
+    if (!accessToken) {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
 
     const apiBaseUrl = VISMA_API_BASE_URL;
     const headers = {
-      'Authorization': `Bearer ${global.vismaTokens.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     };
 

@@ -8,6 +8,7 @@ module.exports = async (req, res) => {
   const clientId = req.headers['x-visma-client-id'] || req.query.client_id;
   if (!clientId) return res.status(400).json({ error: 'Missing x-visma-client-id header' });
 
+  // Use the Vercel app callback URL - you need to update this in your Visma app registration
   const host = req.headers['x-forwarded-host'] || req.headers['host'];
   const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
   const redirectUri = `${proto}://${host}/api/auth/visma/callback`;
