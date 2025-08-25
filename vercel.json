@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd packages/web && rm -rf node_modules package-lock.json && npm install --force && npm install @rollup/rollup-linux-x64-gnu --force && npm run build",
+  "buildCommand": "cd packages/web && npm install --force && npm run build",
   "outputDirectory": "packages/web/dist",
   "functions": {
     "api/*.js": {

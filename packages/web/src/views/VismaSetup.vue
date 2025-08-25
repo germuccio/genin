@@ -591,8 +591,10 @@ onMounted(async () => {
     // Check connection status to update the UI
     await vismaStore.checkConnection()
     
+    // Always load presets
+    loadPresets();
+    
     if (vismaStore.isConnected) {
-      loadPresets();
       loadArticles();
       loadArticleMapping();
     }
@@ -617,9 +619,11 @@ onMounted(async () => {
   // Check initial connection status
   await vismaStore.checkConnection()
   
-  // Load presets if connected
+  // Always load presets (they don't require Visma connection)
+  loadPresets()
+  
+  // Load Visma-specific features if connected
   if (vismaStore.isConnected) {
-    loadPresets()
     loadArticles()
     loadArticleMapping()
   }
