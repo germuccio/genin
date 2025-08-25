@@ -1685,4 +1685,8 @@ app.post('/api/visma/invoices/create-direct', async (req: Request, res: Response
 
 // Start HTTP server for API
 app.listen(PORT, () => {
-  console.log(`
+  console.log(`🚀 Minimal API server running on port ${PORT}`);
+});
+
+// Export the app for testing or serverless environments
+export default app;
