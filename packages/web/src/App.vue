@@ -14,18 +14,11 @@
         
         <div class="nav-status">
           <span 
-            v-if="environment"
-            :class="['env-badge', environment === 'production' ? 'env-production' : 'env-sandbox']"
-            :title="`Running in ${environment} mode`"
-          >
-            {{ environment === 'production' ? '🔴 LIVE' : '🟡 TEST' }}
-          </span>
-          <span 
-            :class="['status-badge', vismaStore.isConnected ? 'status-connected' : 'status-disconnected']"
-            :title="vismaStore.isConnected ? 'Connected to Visma' : 'Not connected to Visma'"
+            :class="['status-badge', vismaStatusClass]"
+            :title="`Visma API Mode: ${apiMode}`"
           >
             <span class="status-dot"></span>
-            {{ vismaStore.isConnected ? 'Connected' : 'Disconnected' }}
+            {{ vismaStatusText }}
           </span>
           <button v-if="isAuthenticated" @click="logout" class="btn btn-sm btn-secondary">
             🚪 Logout
@@ -53,8 +46,14 @@ const vismaStore = useVismaStore()
 const apiMode = ref('TEST'); // Default to TEST
 
 const vismaStatusClass = computed(() => {
-  return vismaStore.isConnected ? 'status-connected' : 'status-disconnected'
-})
+  if (apiMode.value === 'LIVE' && vismaStore.isConnected) return 'status-live';
+  return vismaStore.isConnected ? 'status-connected' : 'status-disconnected';
+});
+
+const vismaStatusText = computed(() => {
+    let statusText = vismaStore.isConnected ? 'CONNECTED' : 'DISCONNECTED';
+    return `${apiMode.value} | ${statusText}`;
+});
 
 const logout = async () => {
   try {
@@ -92,15 +91,6 @@ const checkVismaStatus = async () => {
 }
 
 onMounted(async () => {
-  vismaStore.checkConnection()
-  
-  // Get environment info
-  try {
-    const response = await axios.get('/api/auth/me')
-    environment.value = response.data.environment
-  } catch (error) {
-    console.error('Failed to get environment info:', error)
-  }
   await checkAuth()
   await checkVismaStatus()
 })
@@ -126,6 +116,12 @@ onMounted(async () => {
   letter-spacing: 0.05em;
 }
 
+.status-live {
+  background: var(--danger-light);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
 .status-connected {
   background: var(--success-light);
   color: var(--success);
@@ -133,9 +129,9 @@ onMounted(async () => {
 }
 
 .status-disconnected {
-  background: var(--danger-light);
-  color: var(--danger);
-  border: 1px solid var(--danger);
+  background: var(--warning-light);
+  color: var(--warning);
+  border: 1px solid var(--warning);
 }
 
 .status-dot {
