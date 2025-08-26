@@ -389,14 +389,32 @@ const createInvoicesInVisma = async () => {
   const articleMapping = JSON.parse(savedMapping);
 
   try {
-    const response = await axios.post('/api/invoices/create-in-visma', {
+    // Check if we have an import_id from recent upload (Vercel workflow)
+    const lastUpload = localStorage.getItem('lastUploadResult')
+    let import_id = null
+    if (lastUpload) {
+      try {
+        const uploadData = JSON.parse(lastUpload)
+        import_id = uploadData.data?.import_id
+      } catch (e) {
+        console.warn('Could not parse upload result:', e)
+      }
+    }
+
+    const requestData = {
       customerDefaults: customerDefaults.value,
       customerOverrides: perCustomerOverrides.value,
-      articleMapping: articleMapping
-    })
+      articleMapping: articleMapping,
+      ...(import_id && { import_id }) // Include import_id if available (Vercel)
+    }
+
+    const response = await axios.post('/api/invoices/create-in-visma', requestData)
     
     if (response.data.success) {
-      const { created, errors } = response.data
+      // Handle both local and Vercel API response formats
+      const created = response.data.created || response.data.summary?.successful || 0
+      const errors = response.data.errors || response.data.summary?.errors || []
+      const failed = response.data.summary?.failed || 0
       
       if (created > 0) {
         alert(`✅ Successfully created ${created} invoices in Visma eAccounting!`)
@@ -404,9 +422,15 @@ const createInvoicesInVisma = async () => {
         await loadInvoices()
       }
       
-      if (errors && errors.length > 0) {
+      if (errors.length > 0 || failed > 0) {
         console.warn('Some invoices failed:', errors)
-        alert(`⚠️ Created ${created} invoices, but ${errors.length} failed. Check console for details.`)
+        const failedCount = failed || errors.length
+        alert(`⚠️ Created ${created} invoices, but ${failedCount} failed. Check console for details.`)
+      }
+      
+      // Handle Vercel-specific response format
+      if (response.data.note) {
+        console.info('Note:', response.data.note)
       }
     }
   } catch (err: any) {
@@ -427,10 +451,22 @@ const loadInvoices = async () => {
   
   try {
     const response = await axios.get('/api/invoices')
-    invoices.value = response.data
+    // Ensure we always have an array, handle both local and Vercel API formats
+    if (response.data.invoices) {
+      // Vercel format with import data
+      invoices.value = response.data.invoices
+    } else if (Array.isArray(response.data)) {
+      // Local format - direct array
+      invoices.value = response.data
+    } else {
+      // Fallback to empty array
+      invoices.value = []
+    }
   } catch (err: any) {
     console.error('Failed to load invoices:', err)
     error.value = err.response?.data?.error || 'Failed to load invoices'
+    // Ensure invoices is always an array even on error
+    invoices.value = []
   } finally {
     isLoading.value = false
   }
