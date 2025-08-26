@@ -36,8 +36,8 @@ module.exports = async (req, res) => {
     console.log('📁 Files received:', Object.keys(files));
     console.log('📋 Fields received:', Object.keys(fields));
 
-    // Get the uploaded file
-    const fileArray = files.file || files.files;
+    // Get the uploaded file using the correct field name 'excel'
+    const fileArray = files.excel;
     if (!fileArray || fileArray.length === 0) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
