@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
 
   // Check authentication
   const session = getSession(req);
-  if (!session.authenticated) {
+  if (!session || !session.authenticated) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
