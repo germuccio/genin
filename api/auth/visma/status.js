@@ -1,5 +1,5 @@
 const { setCors, getSession } = require('../../_utils');
-const cookie = require('../_cookie');
+const cookie = require('../../_cookie');
 
 // Simple in-memory token storage for serverless (resets on cold start)
 // This is now a fallback, the cookie is the source of truth
@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   
   const session = getSession(req);
-  if (!session.authenticated) {
+  if (!session || !session.authenticated) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 

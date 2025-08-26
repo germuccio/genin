@@ -6,7 +6,7 @@ module.exports = async (req, res) => {
 
   const session = getSession(req);
   return res.json({
-    authenticated: !!session.authenticated,
+    authenticated: !!(session && session.authenticated),
     environment: {
       VISMA_API_ENVIRONMENT: 'production',
       VISMA_API_BASE_URL: 'https://eaccountingapi.vismaonline.com',
