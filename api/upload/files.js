@@ -1,5 +1,5 @@
 const { setCors, getSession } = require('../_utils');
-const formidable = require('formidable');
+const { formidable } = require('formidable'); // Correctly import the formidable function
 const XLSX = require('xlsx');
 const fs = require('fs');
 
