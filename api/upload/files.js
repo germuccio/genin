@@ -1,5 +1,5 @@
 const { setCors, getSession } = require('../_utils');
-const { formidable } = require('formidable'); // Correctly import the formidable function
+const formidable = require('formidable'); // Use standard require for formidable v3
 const XLSX = require('xlsx');
 const fs = require('fs');
 
@@ -23,8 +23,8 @@ module.exports = async (req, res) => {
   try {
     console.log('🚀 Processing file upload in Vercel...');
     
-    // Configure formidable for Vercel environment
-    const form = formidable({
+    // Configure formidable for Vercel environment (v3 syntax)
+    const form = new formidable.IncomingForm({
       maxFileSize: 10 * 1024 * 1024, // 10MB limit
       keepExtensions: true,
       multiples: false // Single file for now
