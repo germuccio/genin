@@ -290,10 +290,17 @@ const handleUpload = async () => {
       }
     })
 
-    uploadResult.value = response.data
-    
-    // Save upload result to localStorage for persistence
-    saveUploadResult(response.data)
+    // Defensively handle the response to prevent crashes
+    const resultData = response.data;
+    if (resultData && typeof resultData === 'object') {
+      // Ensure the 'errors' property is always an array, even if the API omits it
+      resultData.errors = resultData.errors || [];
+      uploadResult.value = resultData;
+      saveUploadResult(resultData);
+    } else {
+      // Handle cases where the response is not a valid object
+      throw new Error('Received an invalid response from the server.');
+    }
     
     // Reset form
     selectedFiles.value = { excel: null, pdfs: [] }
