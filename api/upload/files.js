@@ -100,6 +100,7 @@ module.exports = async (req, res) => {
       message: `Successfully processed ${processedInvoices.length} invoices from ${uploadedFile.originalFilename}`,
       invoices: processedInvoices.slice(0, 5), // Return first 5 as preview
       total_count: processedInvoices.length,
+      errors: [], // <-- ADD THIS EMPTY ARRAY
       note: 'Excel file processed successfully in Vercel!'
     });
     
