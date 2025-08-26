@@ -21,7 +21,9 @@
     "axios": "^1.7.2",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
-    "pg": "^8.11.5"
+    "formidable": "^3.5.4",
+    "pg": "^8.11.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"
@@ -44,6 +46,3 @@
     "node": ">=18.0.0"
   }
 }
-
-
-
