@@ -17,8 +17,18 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'Invalid JSON' });
       }
 
+      console.log('🔍 Login attempt with password:', password ? 'Present' : 'Missing');
+      console.log('🔍 Expected APP_PASSWORD:', APP_PASSWORD ? 'Set' : 'Missing');
+      
       if (password !== APP_PASSWORD) {
-        return res.status(401).json({ error: 'Invalid password' });
+        return res.status(401).json({ 
+          error: 'Invalid password',
+          debug: {
+            provided: password ? 'Present' : 'Missing',
+            expected: APP_PASSWORD ? 'Set' : 'Missing',
+            environment: process.env.NODE_ENV || 'development'
+          }
+        });
       }
 
       const session = { authenticated: true, ts: Date.now() };
