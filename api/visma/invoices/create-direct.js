@@ -43,8 +43,8 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log('📍 Create direct invoices endpoint called - v2.0');
-    console.log('📍 Request body:', req.body);
+    console.log('📍 Create direct invoices endpoint called - v2.3');
+    // console.log('📍 Request body:', req.body); // Keep this commented out for cleaner logs
     console.log('📍 Request headers cookies:', req.headers.cookie ? 'Present' : 'Missing');
     
     let tokens = null;
@@ -143,11 +143,12 @@ module.exports = async (req, res) => {
     }
 
     if (!termsOfPaymentId) {
-      console.log('📍 No terms of payment found, will try to create invoices without it and let Visma use default');
-      // Don't fail here - let's try to create invoices and see if Visma accepts them without terms of payment
+      console.error('🔥 CRITICAL: TermsOfPaymentId was not found after a successful API call. This should not happen.');
+      return res.status(500).json({ error: 'Could not determine Terms of Payment from Visma. Cannot create invoices.' });
     }
 
     // Process invoices in batches to avoid timeout
+    console.log(`📍 Starting to process ${importInvoices.length} invoices in batches...`);
     const batchSize = 5;
     for (let i = 0; i < importInvoices.length; i += batchSize) {
       const batch = importInvoices.slice(i, i + batchSize);
@@ -161,9 +162,8 @@ module.exports = async (req, res) => {
           let customerId = null;
           const customerName = invoice.mottaker || 'Unknown Customer';
           
-          console.log(`📍 Searching for customer: ${customerName}`);
-          
           // Try to find existing customer first
+          console.log(`[${invoice.referanse}] Searching for customer "${customerName}"...`);
           try {
             const customerSearchResp = await axios.get(`${apiBaseUrl}/v2/customers`, {
               headers: {
@@ -175,42 +175,44 @@ module.exports = async (req, res) => {
               }
             });
             
-            console.log(`📍 Customer search response:`, customerSearchResp.data);
-            
-            if (customerSearchResp.data && customerSearchResp.data.length > 0) {
-              customerId = customerSearchResp.data[0].id;
-              console.log(`📍 Found existing customer: ${customerName} (${customerId})`);
+            if (customerSearchResp.data && customerSearchResp.data.Data && customerSearchResp.data.Data.length > 0) {
+              customerId = customerSearchResp.data.Data[0].Id;
+              console.log(`[${invoice.referanse}] Found existing customer: ${customerName} (${customerId})`);
             } else {
-              console.log(`📍 No existing customer found for: ${customerName}`);
+               console.log(`[${invoice.referanse}] Customer not found, will create.`);
             }
           } catch (searchErr) {
-            console.log('📍 Customer search failed:', searchErr.response?.status, searchErr.response?.data || searchErr.message);
+            console.error(`[${invoice.referanse}] Customer search failed:`, searchErr.response?.data || searchErr.message);
           }
           
           // Create customer if not found
           if (!customerId) {
+            console.log(`[${invoice.referanse}] Preparing to create customer "${customerName}"...`);
             const customerData = {
-              name: customerName,
-              address: {
-                address: customerDefaults.address || 'Ukjent adresse',
-                postalCode: customerDefaults.postalCode || '0001',
-                city: customerDefaults.city || 'Oslo',
-                country: customerDefaults.country || 'NO'
-              },
-              isPrivatePerson: false
+              Name: customerName, // Use PascalCase for customer creation too
+              Email: `test+${Date.now()}@example.com`, // Visma requires an email
+              IsPrivatePerson: false
             };
             
-            const customerResp = await axios.post(`${apiBaseUrl}/v2/customers`, customerData, {
-              headers: {
-                'Authorization': `Bearer ${tokens.access_token}`,
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            customerId = customerResp.data.id;
-            console.log(`📍 Created customer: ${customerName} (${customerId})`);
-          }
+            try {
+              const customerResp = await axios.post(`${apiBaseUrl}/v2/customers`, customerData, {
+                headers: {
+                  'Authorization': `Bearer ${tokens.access_token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
 
+              customerId = customerResp.data.Id;
+              console.log(`[${invoice.referanse}] Successfully created customer: ${customerName} (${customerId})`);
+            } catch(createErr) {
+                console.error(`[${invoice.referanse}] CRITICAL: Failed to create customer:`, createErr.response?.data || createErr.message);
+                // Skip this invoice if we can't create a customer
+                results.failed++;
+                results.errors.push(`${invoice.referanse}: Failed to find or create customer "${customerName}"`);
+                continue; 
+            }
+          }
+          
           // Get article ID from mapping
           const articleId = articleMapping.ok || articleMapping['OK'] || null;
           if (!articleId) {
@@ -247,14 +249,10 @@ module.exports = async (req, res) => {
             }]
           };
 
-          // Add terms of payment only if we have one
-          if (termsOfPaymentId) {
-            invoiceData.TermsOfPaymentId = termsOfPaymentId;
-          }
+          // Add terms of payment
+          invoiceData.TermsOfPaymentId = termsOfPaymentId;
 
-          console.log(`📍 Creating invoice ${invoice.referanse}`);
-          console.log(`📍 Invoice data being sent to Visma:`, JSON.stringify(invoiceData, null, 2));
-
+          console.log(`[${invoice.referanse}] Sending final invoice data to Visma...`);
           const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
             headers: {
               'Authorization': `Bearer ${tokens.access_token}`,
@@ -262,13 +260,13 @@ module.exports = async (req, res) => {
             }
           });
 
-          console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.id})`);
+          console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id})`);
           results.successful++;
           
         } catch (error) {
-          console.error(`❌ Failed to create invoice ${invoice.referanse}:`, error.response?.data || error.message);
+          console.error(`❌ Failed to create invoice ${invoice.referanse}:`, error.response?.data ? JSON.stringify(error.response.data) : error.message);
           results.failed++;
-          results.errors.push(`${invoice.referanse}: ${error.response?.data?.message || error.message}`);
+          results.errors.push(`${invoice.referanse}: ${error.response?.data?.DeveloperErrorMessage || error.response?.data?.message || error.message}`);
         }
       }
       
