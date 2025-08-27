@@ -244,7 +244,8 @@ module.exports = async (req, res) => {
             invoiceData.TermsOfPaymentId = termsOfPaymentId;
           }
 
-          console.log(`📍 Creating invoice ${invoice.referanse} with data:`, JSON.stringify(invoiceData, null, 2));
+          console.log(`📍 Creating invoice ${invoice.referanse}`);
+          console.log(`📍 Invoice data being sent to Visma:`, JSON.stringify(invoiceData, null, 2));
 
           const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
             headers: {
