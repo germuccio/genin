@@ -35,6 +35,9 @@ async function exchangeCodeForTokens(code, opts = {}) {
     tokenData.expires_at = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
     
     console.log('🎉 Token exchange successful!');
+    // --- NEW DEBUGGING ---
+    console.log('📦 Full token data from Visma:', tokenData);
+    // --- END NEW DEBUGGING ---
     console.log('Access token received:', tokenData.access_token ? '✅' : '❌');
     console.log('Refresh token received:', tokenData.refresh_token ? '✅' : '❌');
     console.log('Expires in:', tokenData.expires_in, 'seconds');
