@@ -108,7 +108,14 @@ module.exports = async (req, res) => {
       valid_rows: processedInvoices.length,
       errors: [],
       pdf_files: [], // PDFs not handled in Vercel yet
-      message: `Successfully processed ${processedInvoices.length} invoices from ${uploadedFile.originalFilename}`
+      message: `Successfully processed ${processedInvoices.length} invoices from ${uploadedFile.originalFilename}`,
+      // Include the processed data for Vercel stateless environment
+      _vercel_import_data: {
+        invoices: processedInvoices,
+        timestamp: new Date().toISOString(),
+        filename: uploadedFile.originalFilename,
+        total_count: processedInvoices.length
+      }
     });
     
   } catch (error) {

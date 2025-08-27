@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
 
   try {
     console.log('📍 Process import endpoint called');
-    const { import_id } = req.body;
+    const { import_id, import_data } = req.body;
     
     if (!import_id) {
       return res.status(400).json({ error: 'import_id is required' });
@@ -27,13 +27,27 @@ module.exports = async (req, res) => {
     console.log('📍 Looking for import_id:', import_id);
     console.log('📍 Available imports:', Object.keys(global.processedImports || {}));
 
-    // Get the processed import data
-    if (!global.processedImports || !global.processedImports[import_id]) {
-      return res.status(404).json({ error: 'Import not found' });
+    // Try to get data from global storage first (for compatibility)
+    let importData = null;
+    if (global.processedImports && global.processedImports[import_id]) {
+      importData = global.processedImports[import_id];
+      console.log('📍 Found import data in global storage with', importData.invoices.length, 'invoices');
+    } else if (import_data) {
+      // Fallback: accept import data in request body (for Vercel stateless environment)
+      importData = import_data;
+      console.log('📍 Using import data from request body with', importData.invoices?.length || 0, 'invoices');
+    } else {
+      console.log('📍 No import data found in global storage or request body');
+      return res.status(404).json({ 
+        error: 'Import not found',
+        available_imports: Object.keys(global.processedImports || {}),
+        note: 'In Vercel serverless environment, data may not persist between function calls'
+      });
     }
 
-    const importData = global.processedImports[import_id];
-    console.log('📍 Found import data with', importData.invoices.length, 'invoices');
+    if (!importData || !importData.invoices) {
+      return res.status(404).json({ error: 'Import data is invalid or missing invoices' });
+    }
 
     // Convert the uploaded data to invoice format
     let processed = 0;
