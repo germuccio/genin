@@ -117,14 +117,16 @@ module.exports = async (req, res) => {
         console.log(`📍 Using terms of payment: ${termsResp.data[0].name} (${termsOfPaymentId})`);
       }
     } catch (termsErr) {
-      console.log('📍 Could not fetch terms of payment:', termsErr.response?.data || termsErr.message);
+      console.log('📍 Could not fetch terms of payment:');
+      console.log('📍 Error status:', termsErr.response?.status);
+      console.log('📍 Error data:', termsErr.response?.data);
+      console.log('📍 Error message:', termsErr.message);
+      console.log('📍 API URL used:', `${apiBaseUrl}/v2/termsofpayments`);
     }
 
     if (!termsOfPaymentId) {
-      return res.status(500).json({
-        error: 'Could not fetch required terms of payment from Visma',
-        note: 'Terms of payment are required for invoice creation'
-      });
+      console.log('📍 No terms of payment found, will try to create invoices without it and let Visma use default');
+      // Don't fail here - let's try to create invoices and see if Visma accepts them without terms of payment
     }
 
     // Process invoices in batches to avoid timeout
@@ -197,8 +199,7 @@ module.exports = async (req, res) => {
             currency: invoice.currency || 'NOK',
             yourReference: invoice.your_reference || '',
             ourReference: invoice.referanse,
-            // Required fields that were missing
-            termsOfPaymentId: termsOfPaymentId,
+            // Required address fields
             invoiceCity: customerDefaults.city || 'Oslo',
             invoicePostalCode: customerDefaults.postalCode || '0001',
             invoiceAddress: customerDefaults.address || 'Ukjent adresse',
@@ -211,6 +212,11 @@ module.exports = async (req, res) => {
               vatPercentage: 25 // Standard Norwegian VAT
             }]
           };
+
+          // Add terms of payment only if we have one
+          if (termsOfPaymentId) {
+            invoiceData.termsOfPaymentId = termsOfPaymentId;
+          }
 
           const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
             headers: {
