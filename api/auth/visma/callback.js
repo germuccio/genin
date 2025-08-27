@@ -34,10 +34,29 @@ async function exchangeCodeForTokens(code, opts = {}) {
     // Add expiration timestamp
     tokenData.expires_at = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
     
+    // --- FINAL FIX: Manually fetch company info to get instance_url ---
+    try {
+      console.log('🚀 Fetching company info to find instance_url...');
+      const companyResponse = await axios.get('https://eaccountingapi.vismaonline.com/v2/company', {
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`
+        }
+      });
+      
+      if (companyResponse.data && companyResponse.data.ApiUrl) {
+        tokenData.instance_url = companyResponse.data.ApiUrl;
+        console.log('✅ Found and added instance_url:', tokenData.instance_url);
+      } else {
+        console.warn('⚠️ Could not find ApiUrl in company response.');
+      }
+    } catch (companyError) {
+      console.error('❌ Failed to fetch company info:', companyError.response?.data || companyError.message);
+      // We don't fail the login here, but it's a bad sign.
+    }
+    // --- END FINAL FIX ---
+    
     console.log('🎉 Token exchange successful!');
-    // --- NEW DEBUGGING ---
-    console.log('📦 Full token data from Visma:', tokenData);
-    // --- END NEW DEBUGGING ---
+    console.log('📦 Full token data from Visma (after enrichment):', tokenData);
     console.log('Access token received:', tokenData.access_token ? '✅' : '❌');
     console.log('Refresh token received:', tokenData.refresh_token ? '✅' : '❌');
     console.log('Expires in:', tokenData.expires_in, 'seconds');
