@@ -14,8 +14,7 @@ module.exports = async (req, res) => {
   const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
   const redirectUri = `${proto}://${host}/api/auth/visma/callback`;
 
-  const scopes = encodeURIComponent('ea:api ea:sales ea:purchase ea:accounting vls:api offline_access');
-  // Build a signed state containing client credentials so callback can exchange tokens
+  // Create a signed state object
   const statePayload = {
     cid: clientId,
     // Include secret only if supplied by UI; otherwise callback will use env
@@ -25,13 +24,15 @@ module.exports = async (req, res) => {
   const stateBody = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
   const stateSig = signSession(statePayload);
   const state = `${stateBody}.${stateSig}`;
-  const serviceId = '44643EB1-3F76-4C1C-A672-402AE8085934';
+
+  // Add the discovery scope required to find the instance_url
+  const scope = 'ea:api ea:sales ea:purchase ea:accounting vls:api offline_access discovery-api:read';
 
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: 'ea:api ea:sales ea:purchase ea:accounting vls:api offline_access',
+    scope: scope,
     state,
     prompt: 'select_account',
     acr_values: `service:${serviceId}`,
