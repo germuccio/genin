@@ -103,6 +103,7 @@ module.exports = async (req, res) => {
 
     // Get terms of payment ID once for all invoices
     let termsOfPaymentId = null;
+    console.log('📍 Fetching terms of payment from:', `${apiBaseUrl}/v2/termsofpayments`);
     try {
       const termsResp = await axios.get(`${apiBaseUrl}/v2/termsofpayments`, {
         headers: {
@@ -111,15 +112,20 @@ module.exports = async (req, res) => {
         }
       });
       
+      console.log('📍 Terms of payment response status:', termsResp.status);
+      console.log('📍 Terms of payment response data:', termsResp.data);
+      
       // Use the first available terms of payment (typically "Net 30" or similar)
       if (termsResp.data && termsResp.data.length > 0) {
         termsOfPaymentId = termsResp.data[0].id;
         console.log(`📍 Using terms of payment: ${termsResp.data[0].name} (${termsOfPaymentId})`);
+      } else {
+        console.log('📍 No terms of payment found in response data');
       }
     } catch (termsErr) {
       console.log('📍 Could not fetch terms of payment:');
       console.log('📍 Error status:', termsErr.response?.status);
-      console.log('📍 Error data:', termsErr.response?.data);
+      console.log('📍 Error data:', JSON.stringify(termsErr.response?.data));
       console.log('📍 Error message:', termsErr.message);
       console.log('📍 API URL used:', `${apiBaseUrl}/v2/termsofpayments`);
     }
@@ -217,6 +223,8 @@ module.exports = async (req, res) => {
           if (termsOfPaymentId) {
             invoiceData.termsOfPaymentId = termsOfPaymentId;
           }
+
+          console.log(`📍 Creating invoice ${invoice.referanse} with data:`, JSON.stringify(invoiceData, null, 2));
 
           const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
             headers: {
