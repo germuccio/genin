@@ -106,7 +106,9 @@ module.exports = async (req, res) => {
       processed: processed,
       import_id: parseInt(import_id),
       errors: errors,
-      message: `Processed ${processed} invoices from import ${import_id}`
+      message: `Processed ${processed} invoices from import ${import_id}`,
+      // Return processed invoices for Vercel stateless environment
+      processed_invoices: global.invoices.filter(inv => inv.import_id === parseInt(import_id))
     });
   } catch (error) {
     console.error('📍 Process import error:', error);

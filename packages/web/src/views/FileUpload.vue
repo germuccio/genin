@@ -357,7 +357,9 @@ const generateInvoicesDirect = async () => {
       import_id: uploadResult.value.import_id,
       articleMapping,
       customerDefaults,
-      customerOverrides
+      customerOverrides,
+      // Pass processed invoices for Vercel stateless environment
+      processed_invoices: processResp.data.processed_invoices
     })
 
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
@@ -409,7 +411,9 @@ const processSpecificImport = async (importId: number) => {
       import_id: importId,
       articleMapping,
       customerDefaults,
-      customerOverrides
+      customerOverrides,
+      // Pass processed invoices for Vercel stateless environment
+      processed_invoices: processResp.data.processed_invoices
     })
 
     alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)

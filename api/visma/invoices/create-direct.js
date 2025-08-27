@@ -59,24 +59,32 @@ module.exports = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
     
-    const { import_id, articleMapping, customerDefaults, customerOverrides } = req.body;
-    console.log('📍 Parsed request data:', { import_id, articleMapping, customerDefaults, customerOverrides });
+    const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices } = req.body;
+    console.log('📍 Parsed request data:', { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices: processed_invoices ? `${processed_invoices.length} invoices` : 'none' });
     
     if (!import_id) {
       return res.status(400).json({ error: 'import_id is required' });
     }
 
-    // Get invoices from global storage
-    const invoices = global.invoices || [];
-    const importInvoices = invoices.filter(inv => inv.import_id === parseInt(import_id));
+    // Try to get invoices from global storage first (for local development)
+    let importInvoices = [];
+    const globalInvoices = global.invoices || [];
+    const globalImportInvoices = globalInvoices.filter(inv => inv.import_id === parseInt(import_id));
     
-    console.log('📍 Found', importInvoices.length, 'invoices for import_id:', import_id);
-    
-    if (importInvoices.length === 0) {
+    if (globalImportInvoices.length > 0) {
+      importInvoices = globalImportInvoices;
+      console.log('📍 Found', importInvoices.length, 'invoices from global storage for import_id:', import_id);
+    } else if (processed_invoices && Array.isArray(processed_invoices)) {
+      // Fallback: use processed invoices passed from frontend (for Vercel stateless environment)
+      importInvoices = processed_invoices;
+      console.log('📍 Using', importInvoices.length, 'invoices from request body for import_id:', import_id);
+    } else {
+      console.log('📍 No invoices found in global storage or request body for import_id:', import_id);
       return res.status(404).json({ 
         error: 'No invoices found for this import ID',
         import_id: import_id,
-        available_imports: [...new Set(invoices.map(i => i.import_id))]
+        available_imports: [...new Set(globalInvoices.map(i => i.import_id))],
+        note: 'In Vercel, pass processed_invoices in request body'
       });
     }
 
