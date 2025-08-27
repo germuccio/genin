@@ -43,7 +43,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log('📍 Create direct invoices endpoint called');
+    console.log('📍 Create direct invoices endpoint called - v2.0');
     console.log('📍 Request body:', req.body);
     console.log('📍 Request headers cookies:', req.headers.cookie ? 'Present' : 'Missing');
     
