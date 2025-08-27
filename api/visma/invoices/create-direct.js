@@ -43,7 +43,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log('📍 Create direct invoices endpoint called - v2.4');
+    console.log('📍 Create direct invoices endpoint called - v2.5');
     // console.log('📍 Request body:', req.body); // Keep this commented out for cleaner logs
     console.log('📍 Request headers cookies:', req.headers.cookie ? 'Present' : 'Missing');
     
@@ -99,7 +99,11 @@ module.exports = async (req, res) => {
       errors: []
     };
 
+    // --- NEW DEBUGGING ---
+    console.log('📍 Using tokens from cookie:', JSON.stringify(tokens, null, 2));
     const apiBaseUrl = tokens.instance_url || 'https://eaccountingapi.vismaonline.com';
+    console.log('📍 Resolved API Base URL:', apiBaseUrl);
+    // --- END NEW DEBUGGING ---
 
     // Get terms of payment ID once for all invoices
     let termsOfPaymentId = null;
