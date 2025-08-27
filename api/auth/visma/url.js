@@ -1,4 +1,4 @@
-const { setCors } = require('../../_utils');
+const { setCors, signSession } = require('../../_utils');
 const crypto = require('crypto');
 
 module.exports = async (req, res) => {
@@ -6,6 +6,7 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const clientId = req.headers['x-visma-client-id'] || req.query.client_id;
+  const clientSecret = req.headers['x-visma-client-secret'] || req.query.client_secret;
   if (!clientId) return res.status(400).json({ error: 'Missing x-visma-client-id header' });
 
   // Use the Vercel app callback URL - you need to update this in your Visma app registration
@@ -14,7 +15,16 @@ module.exports = async (req, res) => {
   const redirectUri = `${proto}://${host}/api/auth/visma/callback`;
 
   const scopes = encodeURIComponent('ea:api ea:sales ea:purchase ea:accounting vls:api offline_access');
-  const state = crypto.randomBytes(8).toString('hex');
+  // Build a signed state containing client credentials so callback can exchange tokens
+  const statePayload = {
+    cid: clientId,
+    // Include secret only if supplied by UI; otherwise callback will use env
+    ...(clientSecret ? { cs: clientSecret } : {}),
+    ts: Date.now(),
+  };
+  const stateBody = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
+  const stateSig = signSession(statePayload);
+  const state = `${stateBody}.${stateSig}`;
   const serviceId = '44643EB1-3F76-4C1C-A672-402AE8085934';
 
   const params = new URLSearchParams({
@@ -27,12 +37,15 @@ module.exports = async (req, res) => {
     acr_values: `service:${serviceId}`,
   });
 
-  // Visma sandbox now uses the SAME URLs as production, just with sandbox client_id
-  // The sandbox companies are automatically suffixed with "sandbox" in company name
-  const isSandbox = clientId.includes('sandbox') || clientId.includes('test') || 
+  // Decide environment from client id or explicit header
+  const isSandbox = clientId.includes('sandbox') || clientId.includes('test') ||
                    req.headers['x-visma-environment'] === 'sandbox';
   
-  const identityBaseUrl = 'https://identity.vismaonline.com'; // Same for both sandbox and production
+  // Prefer explicit env override, else choose by sandbox/prod
+  const configuredIdentityUrl = process.env.VISMA_IDENTITY_URL;
+  const identityBaseUrl = configuredIdentityUrl || (isSandbox
+    ? 'https://identity-sandbox.vismaonline.com'
+    : 'https://identity.vismaonline.com');
 
   const auth_url = `${identityBaseUrl}/connect/authorize?${params.toString()}`;
   return res.json({ auth_url, redirect_uri: redirectUri, state, environment: isSandbox ? 'sandbox' : 'production' });

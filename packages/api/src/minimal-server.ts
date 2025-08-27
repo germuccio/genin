@@ -10,17 +10,29 @@ import multer from 'multer';
 let XLSX: any;
 import path from 'path';
 import { createRequire } from 'module';
-import { VismaAuthService, VismaTokenData } from './services/visma-auth.js';
+import { VismaAuthService } from './services/visma-auth.js';
 import { db } from './db/database.js';
-// @ts-ignore
-import cookie from './utils/cookie.js';
+// Simple cookie parser (inline implementation)
+const parseCookies = (cookieHeader: string): Record<string, string> => {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  
+  cookieHeader.split(';').forEach(cookie => {
+    const parts = cookie.trim().split('=');
+    if (parts.length === 2) {
+      cookies[parts[0]] = decodeURIComponent(parts[1]);
+    }
+  });
+  
+  return cookies;
+};
 
 // Initialize XLSX with require (works better than ES import)
 const require = createRequire(import.meta.url);
 XLSX = require('xlsx');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 44300; // Fixed port for Visma OAuth callback
 
 // Initialize Visma Auth Service
 const vismaAuth = new VismaAuthService();
@@ -36,6 +48,25 @@ declare global {
 // Initialize global storage
 global.imports = [];
 global.invoices = [];
+
+// Helper function to get Visma tokens from cookies/session
+function getVismaTokens(req: express.Request): any {
+  // Try to get tokens from cookies first
+  const cookies = req.headers.cookie;
+  if (cookies) {
+    const parsedCookies = parseCookies(cookies);
+    if (parsedCookies.visma_tokens) {
+      try {
+        return JSON.parse(parsedCookies.visma_tokens);
+      } catch (e) {
+        console.error('Error parsing visma tokens from cookie:', e);
+      }
+    }
+  }
+  
+  // Fallback to global variable (temporary solution)
+  return global.vismaTokens || null;
+}
 
 // Add endpoint to clear data for testing
 app.post('/api/debug/clear', (req, res) => {
@@ -156,18 +187,7 @@ function verifySession(token: string | undefined): SessionPayload | null {
   }
 }
 
-function parseCookies(req: express.Request): Record<string, string> {
-  const header = req.headers['cookie'];
-  if (!header) return {};
-  return header.split(';').reduce((acc, pair) => {
-    const idx = pair.indexOf('=');
-    if (idx === -1) return acc;
-    const k = pair.slice(0, idx).trim();
-    const v = pair.slice(idx + 1).trim();
-    acc[k] = decodeURIComponent(v);
-    return acc;
-  }, {} as Record<string, string>);
-}
+
 
 // Auth endpoints
 app.post('/api/auth/login', (req, res) => {
@@ -200,7 +220,7 @@ app.use((req, res, next) => {
   ) {
     return next();
   }
-  const cookies = parseCookies(req);
+  const cookies = parseCookies(req.headers.cookie || '');
   const session = verifySession(cookies['genin_session']);
   if (!session) {
     return res.status(401).json({ error: 'Not authenticated' });
@@ -929,21 +949,23 @@ app.post('/api/invoices/process-import', (req, res) => {
     let currency = row.Valuta || row.Currency || row.currency || 'NOK';
     
     // Check if customer appears to be Norwegian (has AS, ASA, etc. or other Norwegian indicators)
-    const isNorwegianCompany = mottaker && (
-      mottaker.includes(' AS') || 
-      mottaker.includes(' ASA') || 
-      mottaker.endsWith(' AS') || 
-      mottaker.endsWith(' ASA') ||
-      mottaker.includes('NORSK') ||
-      mottaker.includes('NORWEGIAN') ||
-      mottaker.includes(' ANS') ||
-      mottaker.endsWith(' ANS') ||
+    // Convert mottaker to string to handle cases where it might be a number
+    const mottakerStr = String(mottaker || '');
+    const isNorwegianCompany = mottakerStr && (
+      mottakerStr.includes(' AS') || 
+      mottakerStr.includes(' ASA') || 
+      mottakerStr.endsWith(' AS') || 
+      mottakerStr.endsWith(' ASA') ||
+      mottakerStr.includes('NORSK') ||
+      mottakerStr.includes('NORWEGIAN') ||
+      mottakerStr.includes(' ANS') ||
+      mottakerStr.endsWith(' ANS') ||
       // Add more Norwegian patterns
-      /\b(NORGE|NORWAY|NORSK)\b/i.test(mottaker) ||
+      /\b(NORGE|NORWAY|NORSK)\b/i.test(mottakerStr) ||
       // Norwegian names/words patterns - more comprehensive
-      /\b(BYGG|SERVICE|EIENDOM|STUDIO|ENERGI|MARKET|BOATS|SPA|TORGET|AUTEK|PLUSS|PREG|NORDIC|IMPORT|EKSPORT|PRO|REKVISITA|BRYGGEN|GLASS|INTER|STAIR|BERG|LAFT|INSTRUMENT|TEAM|KRISTIAN|GEILO|INTERIOR|SKRUE|FABRIKK)\b/i.test(mottaker) ||
+      /\b(BYGG|SERVICE|EIENDOM|STUDIO|ENERGI|MARKET|BOATS|SPA|TORGET|AUTEK|PLUSS|PREG|NORDIC|IMPORT|EKSPORT|PRO|REKVISITA|BRYGGEN|GLASS|INTER|STAIR|BERG|LAFT|INSTRUMENT|TEAM|KRISTIAN|GEILO|INTERIOR|SKRUE|FABRIKK)\b/i.test(mottakerStr) ||
       // Check if it's clearly a Norwegian company name pattern
-      /^[A-ZÆØÅ\s&]+\s+(AS|ASA|ANS)$/i.test(mottaker.trim())
+      /^[A-ZÆØÅ\s&]+\s+(AS|ASA|ANS)$/i.test(mottakerStr.trim())
     );
     
     // Force NOK for all Norwegian companies
@@ -953,11 +975,11 @@ app.post('/api/invoices/process-import', (req, res) => {
     }
     
     // Additional fallback: if company name suggests Norwegian but wasn't caught above
-    const additionalNorwegianPatterns = mottaker && (
-      mottaker.includes('KRISTIAN') ||
-      mottaker.includes('SKRUE') ||
-      mottaker.includes('FABRIKK') ||
-      mottaker.includes('RAZUMN') // Seems to be a Norwegian resident
+    const additionalNorwegianPatterns = mottakerStr && (
+      mottakerStr.includes('KRISTIAN') ||
+      mottakerStr.includes('SKRUE') ||
+      mottakerStr.includes('FABRIKK') ||
+      mottakerStr.includes('RAZUMN') // Seems to be a Norwegian resident
     );
     
     if (additionalNorwegianPatterns && currency === 'EUR') {
@@ -1019,7 +1041,7 @@ app.post('/api/invoices/process-import', (req, res) => {
       referanse: referanse, // Transport Reference
       your_reference: yourReference,
       avsender: avsender, // Sender (your client's client)
-      mottaker: mottaker, // Receiver (who gets invoiced)
+      mottaker: mottakerStr, // Receiver (who gets invoiced) - converted to string
       sekvensnr: sekvensnr, // PDF match code (from column H)
       transportid: transportid,
       status_code: statusCode, // OK/MAN status
@@ -1515,9 +1537,14 @@ app.get('/api/articles', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Not authenticated with Visma. Please connect in Setup.' });
     }
 
-    const accessToken = tokens.access_token;
-    const articles = await vismaAuth.getArticles(accessToken);
-    res.json(articles);
+    const response = await axios.get(`${VISMA_API_BASE_URL}/v2/articles`, {
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    res.json(response.data.Data || []);
   } catch (error: any) {
     console.error('❌ Failed to fetch articles:', error.response?.data || error.message);
     res.status(500).json({ error: 'Failed to fetch articles' });
@@ -1531,7 +1558,89 @@ app.post('/api/articles/create-transport-articles', async (req: Request, res: Re
     if (!tokens || !tokens.access_token) {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
-    const createdArticles = await vismaAuth.createTransportArticles(tokens.access_token);
+
+    const headers = {
+      'Authorization': `Bearer ${tokens.access_token}`,
+      'Content-Type': 'application/json'
+    };
+
+    // Get default unit, coding, and determine next article number
+    let defaultUnitId = null;
+    let defaultCodingId = null;
+    let nextArticleNumber = 1000;
+    
+    try {
+      // Get units
+      const unitsResponse = await axios.get(`${VISMA_API_BASE_URL}/v2/units`, { headers });
+      const units = unitsResponse.data?.Data ?? [];
+      const suitableUnit = units.find((u: any) => ['stk', 'pcs', 'tim'].includes(u.Name?.toLowerCase())) || units[0];
+      if (suitableUnit) {
+        defaultUnitId = suitableUnit.Id;
+        console.log(`📏 Using unit: ${suitableUnit.Name} (${defaultUnitId})`);
+      }
+
+      // Get existing articles to find a valid CodingId and determine next number
+      console.log('🔍 Fetching existing articles to extract CodingId and determine next number...');
+      const articlesResponse = await axios.get(`${VISMA_API_BASE_URL}/v2/articles`, { headers });
+      const existingArticles = articlesResponse.data?.Data ?? [];
+      console.log(`📋 Found ${existingArticles.length} existing articles`);
+      
+      // Use the correct CodingId for VAT exempt vs. standard VAT
+      const highVatCoding = existingArticles.find((a: any) => a.Coding?.Name === 'Tjenester høy mva');
+      
+      if (highVatCoding) {
+        defaultCodingId = highVatCoding.CodingId;
+        console.log(`💰 Using high VAT coding: ${highVatCoding.Coding.Name} (${defaultCodingId})`);
+      } else if (existingArticles.length > 0) {
+        // Fallback to first article's coding
+        defaultCodingId = existingArticles[0].CodingId;
+        console.log(`💰 Using fallback coding from first article: ${defaultCodingId}`);
+      }
+
+      // Determine next article number
+      const articleNumbers = existingArticles.map((a: any) => parseInt(a.Number)).filter(n => !isNaN(n));
+      if (articleNumbers.length > 0) {
+        nextArticleNumber = Math.max(...articleNumbers) + 1;
+      }
+      console.log(`🔢 Next article number: ${nextArticleNumber}`);
+
+    } catch (lookupError: any) {
+      console.error('⚠️ Failed to lookup units/articles:', lookupError.response?.data || lookupError.message);
+    }
+
+    // Validate that we have all required data
+    if (!defaultCodingId) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'No valid coding found in Visma account. CodingId is required for article creation.'
+      });
+    }
+
+    const createdArticles: any = { ok: null };
+
+    // Create OK article
+    const okPreset = global.presets?.find((p: any) => p.code === 'OK');
+    if (okPreset) {
+      const netPrice = okPreset.unit_price_cents / 100;
+      const grossPrice = netPrice * 1.25; // Calculate gross price with 25% VAT
+
+      const okArticleData = {
+        Name: okPreset.article_name,
+        Number: (nextArticleNumber++).toString(),
+        NetPrice: netPrice,
+        GrossPrice: grossPrice,
+        VatRate: 25,
+        IsActive: true,
+        IsService: true,
+        CodingId: defaultCodingId,
+        ...(defaultUnitId && { UnitId: defaultUnitId })
+      };
+
+      const okResponse = await axios.post(`${VISMA_API_BASE_URL}/v2/articles`, okArticleData, { headers });
+      createdArticles.ok = okResponse.data.Id;
+      console.log(`✅ Created OK transport article: ${okPreset.article_name} (ID: ${okResponse.data.Id}, Number: ${okArticleData.Number})`);
+    }
+
     res.json({ success: true, created: createdArticles });
   } catch (error: any) {
     console.error('❌ Failed to create transport articles:', error.response?.data || error.message);
@@ -1568,8 +1677,40 @@ app.delete('/api/visma/invoices/bulk-delete-drafts', async (req, res) => {
     if (!tokens || !tokens.access_token) {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
-    const result = await vismaAuth.bulkDeleteDraftInvoices(tokens.access_token);
-    res.json({ success: true, ...result });
+
+    const headers = {
+      'Authorization': `Bearer ${tokens.access_token}`,
+      'Content-Type': 'application/json'
+    };
+
+    // Get all draft invoices
+    const draftsResponse = await axios.get(`${VISMA_API_BASE_URL}/v2/customerinvoicedrafts`, { headers });
+    const drafts = draftsResponse.data?.Data || [];
+    
+    console.log(`🗑️ Found ${drafts.length} draft invoices to delete`);
+    
+    let deleted = 0;
+    const errors: string[] = [];
+
+    // Delete each draft invoice
+    for (const draft of drafts) {
+      try {
+        await axios.delete(`${VISMA_API_BASE_URL}/v2/customerinvoicedrafts/${draft.Id}`, { headers });
+        deleted++;
+        console.log(`✅ Deleted draft invoice: ${draft.Id}`);
+      } catch (deleteError: any) {
+        const errorMsg = `Failed to delete ${draft.Id}: ${deleteError.response?.data?.Message || deleteError.message}`;
+        errors.push(errorMsg);
+        console.error(`❌ ${errorMsg}`);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      deleted, 
+      total: drafts.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
   } catch (error: any) {
     console.error('❌ Error during bulk delete:', error.response?.data || error.message);
     res.status(500).json({ success: false, error: 'Failed to delete draft invoices' });
@@ -1662,31 +1803,24 @@ app.get('/api/visma/termsofpayments', async (req, res) => {
   }
 });
 
-// Create invoices in Visma (Directly)
-app.post('/api/visma/invoices/create-direct', async (req: Request, res: Response) => {
-  const { import_id, articleMapping, customerDefaults, customerOverrides } = req.body;
 
-  try {
-    const tokens = getVismaTokens(req);
-    if (!tokens || !tokens.access_token) {
-      return res.status(401).json({ error: 'Not authenticated with Visma' });
-    }
-    
-    // ... rest of the function logic ...
 
-    // For now, returning a mock response as the implementation is complex
-    res.json({ success: true, summary: { successful: 0, failed: 0, message: "Endpoint not fully implemented" } });
+// Start HTTPS server for API (required for Visma OAuth)
+try {
+  const privateKey = fs.readFileSync('localhost.key', 'utf8');
+  const certificate = fs.readFileSync('localhost.crt', 'utf8');
+  const credentials = { key: privateKey, cert: certificate };
 
-  } catch (error: any) {
-    console.error('❌ Error in create-direct:', error.message);
-    res.status(500).json({ success: false, error: 'Direct invoice creation failed' });
-  }
-});
-
-// Start HTTP server for API
-app.listen(PORT, () => {
-  console.log(`🚀 Minimal API server running on port ${PORT}`);
-});
+  const httpsServer = https.createServer(credentials, app);
+  httpsServer.listen(PORT, () => {
+    console.log(`🚀 Minimal API server running on HTTPS port ${PORT}`);
+  });
+} catch (error) {
+  console.error('❌ Could not start HTTPS server, falling back to HTTP:', error);
+  app.listen(PORT, () => {
+    console.log(`🚀 Minimal API server running on HTTP port ${PORT}`);
+  });
+}
 
 // Export the app for testing or serverless environments
 export default app;
