@@ -34,34 +34,8 @@ async function exchangeCodeForTokens(code, opts = {}) {
     // Add expiration timestamp
     tokenData.expires_at = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
     
-    // --- DEFINITIVE FIX: Manually fetch service resources to get the correct API URL ---
-    try {
-      console.log('🚀 Fetching service resources to find the eAccounting API URL...');
-      const resourcesResponse = await axios.get('https://api.vismaonline.com/v1/resources', {
-        headers: {
-          'Authorization': `Bearer ${tokenData.access_token}`
-        }
-      });
-      
-      if (resourcesResponse.data && Array.isArray(resourcesResponse.data)) {
-        const eaccountingService = resourcesResponse.data.find(service => service.name === 'Eaccounting');
-        if (eaccountingService && eaccountingService.uri) {
-          tokenData.instance_url = eaccountingService.uri;
-          console.log('✅ Found and added instance_url from resources:', tokenData.instance_url);
-        } else {
-          console.warn('⚠️ Could not find "Eaccounting" service in resources response.');
-        }
-      } else {
-        console.warn('⚠️ Resources response was not in the expected format.');
-      }
-    } catch (resourceError) {
-      console.error('❌ Failed to fetch service resources:', resourceError.response?.data || resourceError.message);
-      // We don't fail the login here, but it's a critical error for subsequent API calls.
-    }
-    // --- END DEFINITIVE FIX ---
-    
     console.log('🎉 Token exchange successful!');
-    console.log('📦 Full token data from Visma (after enrichment):', tokenData);
+    console.log('📦 Full token data from Visma:', tokenData);
     console.log('Access token received:', tokenData.access_token ? '✅' : '❌');
     console.log('Refresh token received:', tokenData.refresh_token ? '✅' : '❌');
     console.log('Expires in:', tokenData.expires_in, 'seconds');
