@@ -260,13 +260,13 @@ module.exports = async (req, res) => {
           invoiceData.TermsOfPaymentId = termsOfPaymentId;
           
           console.log(`[${invoice.referanse}] Preparing to POST invoice.`);
-          console.log(`[${invoice.referanse}] API URL: POST ${apiBaseUrl}/v2/invoices`);
+          console.log(`[${invoice.referanse}] API URL: POST ${apiBaseUrl}/v2/customerinvoicedrafts`);
           console.log(`[${invoice.referanse}] CustomerId: ${invoiceData.CustomerId}`);
           console.log(`[${invoice.referanse}] ArticleId: ${invoiceData.Rows[0].ArticleId}`);
           console.log(`[${invoice.referanse}] TermsOfPaymentId: ${invoiceData.TermsOfPaymentId}`);
 
           try {
-            const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
+                              const invoiceResp = await axios.post(`${apiBaseUrl}/v2/customerinvoicedrafts`, invoiceData, {
               headers: {
                 'Authorization': `Bearer ${tokens.access_token}`,
                 'Content-Type': 'application/json'
