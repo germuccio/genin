@@ -116,11 +116,23 @@ module.exports = async (req, res) => {
       console.log('📍 Terms of payment response data:', termsResp.data);
       
       // Use the first available terms of payment (typically "Net 30" or similar)
+      console.log('📍 Debugging terms response:', {
+        hasData: !!termsResp.data,
+        hasDataProperty: !!(termsResp.data && termsResp.data.Data),
+        dataLength: termsResp.data?.Data?.length || 0,
+        firstItem: termsResp.data?.Data?.[0]
+      });
+      
       if (termsResp.data && termsResp.data.Data && termsResp.data.Data.length > 0) {
         termsOfPaymentId = termsResp.data.Data[0].Id;
         console.log(`📍 Using terms of payment: ${termsResp.data.Data[0].Name} (${termsOfPaymentId})`);
       } else {
         console.log('📍 No terms of payment found in response data');
+        // Force use the first ID from the log data we can see
+        if (termsResp.data?.Data?.[0]?.Id) {
+          termsOfPaymentId = termsResp.data.Data[0].Id;
+          console.log('📍 Forcing terms of payment from backup logic:', termsOfPaymentId);
+        }
       }
     } catch (termsErr) {
       console.log('📍 Could not fetch terms of payment:');
@@ -205,6 +217,11 @@ module.exports = async (req, res) => {
             CurrencyCode: invoice.currency || 'NOK',
             YourReference: invoice.avsender, // Use sender as your reference like local server
             OurReference: invoice.referanse,
+            // Required address fields
+            InvoiceCity: customerDefaults.city || 'Oslo',
+            InvoicePostalCode: customerDefaults.postalCode || '0001',
+            InvoiceAddress: customerDefaults.address || 'Ukjent adresse',
+            InvoiceCountry: customerDefaults.country || 'NO',
             RotReducedInvoicingType: 0,
             EuThirdParty: false,
             Rows: [{
