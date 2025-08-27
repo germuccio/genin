@@ -101,7 +101,8 @@ module.exports = async (req, res) => {
 
     // --- NEW DEBUGGING ---
     console.log('📍 Using tokens from cookie:', JSON.stringify(tokens, null, 2));
-    const apiBaseUrl = tokens.instance_url || 'https://eaccountingapi.vismaonline.com';
+    // Use environment variable as the primary source for the instance URL on Vercel
+    const apiBaseUrl = process.env.VISMA_INSTANCE_URL || tokens.instance_url || 'https://eaccountingapi.vismaonline.com';
     console.log('📍 Resolved API Base URL:', apiBaseUrl);
     // --- END NEW DEBUGGING ---
 
