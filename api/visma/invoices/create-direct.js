@@ -116,9 +116,9 @@ module.exports = async (req, res) => {
       console.log('📍 Terms of payment response data:', termsResp.data);
       
       // Use the first available terms of payment (typically "Net 30" or similar)
-      if (termsResp.data && termsResp.data.length > 0) {
-        termsOfPaymentId = termsResp.data[0].id;
-        console.log(`📍 Using terms of payment: ${termsResp.data[0].name} (${termsOfPaymentId})`);
+      if (termsResp.data && termsResp.data.Data && termsResp.data.Data.length > 0) {
+        termsOfPaymentId = termsResp.data.Data[0].Id;
+        console.log(`📍 Using terms of payment: ${termsResp.data.Data[0].Name} (${termsOfPaymentId})`);
       } else {
         console.log('📍 No terms of payment found in response data');
       }
@@ -197,31 +197,34 @@ module.exports = async (req, res) => {
             throw new Error('No article mapping found for status OK');
           }
 
-          // Create invoice with all required fields
+          // Create invoice with all required fields (using PascalCase like local server)
           const invoiceData = {
-            customerId: customerId,
-            invoiceDate: new Date().toISOString().split('T')[0],
-            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-            currency: invoice.currency || 'NOK',
-            yourReference: invoice.your_reference || '',
-            ourReference: invoice.referanse,
-            // Required address fields
-            invoiceCity: customerDefaults.city || 'Oslo',
-            invoicePostalCode: customerDefaults.postalCode || '0001',
-            invoiceAddress: customerDefaults.address || 'Ukjent adresse',
-            invoiceCountry: customerDefaults.country || 'NO',
-            rows: [{
-              articleId: articleId,
-              description: `Transport service - ${invoice.avsender} to ${invoice.mottaker}`,
-              quantity: 1,
-              unitPrice: invoice.unit_price || 414,
-              vatPercentage: 25 // Standard Norwegian VAT
+            CustomerId: customerId,
+            InvoiceDate: new Date().toISOString().split('T')[0],
+            DueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+            CurrencyCode: invoice.currency || 'NOK',
+            YourReference: invoice.avsender, // Use sender as your reference like local server
+            OurReference: invoice.referanse,
+            RotReducedInvoicingType: 0,
+            EuThirdParty: false,
+            Rows: [{
+              IsTextRow: false,
+              ArticleId: articleId,
+              Description: `Transport service - ${invoice.referanse}`,
+              Quantity: 1,
+              UnitPrice: invoice.unit_price || 414,
+              VatRate: 25, // Standard Norwegian VAT
+              LineNumber: 1,
+              IsWorkCost: false,
+              EligibleForReverseChargeOnVat: false,
+              HideRow: false,
+              ReversedConstructionServicesVatFree: false
             }]
           };
 
           // Add terms of payment only if we have one
           if (termsOfPaymentId) {
-            invoiceData.termsOfPaymentId = termsOfPaymentId;
+            invoiceData.TermsOfPaymentId = termsOfPaymentId;
           }
 
           console.log(`📍 Creating invoice ${invoice.referanse} with data:`, JSON.stringify(invoiceData, null, 2));
