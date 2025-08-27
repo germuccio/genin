@@ -66,15 +66,19 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'import_id is required' });
     }
 
-    console.log('📍 Returning mock response');
-    // Mock response for creating invoices directly in Visma
+    console.log('📍 This is currently a mock endpoint - invoice creation not implemented in Vercel');
+    console.log('📍 For full invoice creation, use the local development server');
+    
+    // Mock response - actual invoice creation requires complex logic
+    // that would be too large for a Vercel function
     res.json({ 
       success: true,
       summary: {
-        successful: 3,
+        successful: 0,
         failed: 0
       },
-      message: 'Invoices created directly in Visma (mock response - Vercel function)'
+      message: 'Mock response: Invoice creation not implemented in Vercel deployment. Use local development server for full functionality.',
+      note: 'This endpoint requires complex invoice processing logic that exceeds Vercel function limits.'
     });
   } catch (error) {
     console.error('📍 Create direct invoices error:', error);
