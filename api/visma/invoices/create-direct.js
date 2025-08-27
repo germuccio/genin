@@ -1,3 +1,5 @@
+const axios = require('axios');
+
 // Inline cookie parsing function for Vercel
 function parseCookies(cookieHeader) {
   const cookies = {};
@@ -88,18 +90,130 @@ module.exports = async (req, res) => {
       });
     }
 
-    // For now, just return success with the count - actual Visma API calls would be too complex for Vercel
-    console.log('📍 Would create', importInvoices.length, 'invoices in Visma');
+    // Actually create invoices in Visma
+    console.log('📍 Creating', importInvoices.length, 'invoices in Visma...');
+    
+    const results = {
+      successful: 0,
+      failed: 0,
+      errors: []
+    };
+
+    const apiBaseUrl = tokens.instance_url || 'https://eaccountingapi.vismaonline.com';
+
+    // Process invoices in batches to avoid timeout
+    const batchSize = 5;
+    for (let i = 0; i < importInvoices.length; i += batchSize) {
+      const batch = importInvoices.slice(i, i + batchSize);
+      console.log(`📍 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(importInvoices.length/batchSize)}`);
+      
+      for (const invoice of batch) {
+        try {
+          // Create customer if needed
+          let customerId = null;
+          const customerName = invoice.mottaker || 'Unknown Customer';
+          
+          // Try to find existing customer first
+          try {
+            const customerSearchResp = await axios.get(`${apiBaseUrl}/v2/customers`, {
+              headers: {
+                'Authorization': `Bearer ${tokens.access_token}`,
+                'Content-Type': 'application/json'
+              },
+              params: {
+                name: customerName
+              }
+            });
+            
+            if (customerSearchResp.data && customerSearchResp.data.length > 0) {
+              customerId = customerSearchResp.data[0].id;
+              console.log(`📍 Found existing customer: ${customerName} (${customerId})`);
+            }
+          } catch (searchErr) {
+            console.log('📍 Customer search failed, will create new customer');
+          }
+          
+          // Create customer if not found
+          if (!customerId) {
+            const customerData = {
+              name: customerName,
+              address: {
+                address: customerDefaults.address || 'Ukjent adresse',
+                postalCode: customerDefaults.postalCode || '0001',
+                city: customerDefaults.city || 'Oslo',
+                country: customerDefaults.country || 'NO'
+              },
+              isPrivatePerson: false
+            };
+            
+            const customerResp = await axios.post(`${apiBaseUrl}/v2/customers`, customerData, {
+              headers: {
+                'Authorization': `Bearer ${tokens.access_token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            customerId = customerResp.data.id;
+            console.log(`📍 Created customer: ${customerName} (${customerId})`);
+          }
+
+          // Get article ID from mapping
+          const articleId = articleMapping.ok || articleMapping['OK'] || null;
+          if (!articleId) {
+            throw new Error('No article mapping found for status OK');
+          }
+
+          // Create invoice
+          const invoiceData = {
+            customerId: customerId,
+            invoiceDate: new Date().toISOString().split('T')[0],
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+            currency: invoice.currency || 'NOK',
+            yourReference: invoice.your_reference || '',
+            ourReference: invoice.referanse,
+            rows: [{
+              articleId: articleId,
+              description: `Transport service - ${invoice.avsender} to ${invoice.mottaker}`,
+              quantity: 1,
+              unitPrice: invoice.unit_price || 414,
+              vatPercentage: 25 // Standard Norwegian VAT
+            }]
+          };
+
+          const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
+            headers: {
+              'Authorization': `Bearer ${tokens.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.id})`);
+          results.successful++;
+          
+        } catch (error) {
+          console.error(`❌ Failed to create invoice ${invoice.referanse}:`, error.response?.data || error.message);
+          results.failed++;
+          results.errors.push(`${invoice.referanse}: ${error.response?.data?.message || error.message}`);
+        }
+      }
+      
+      // Small delay between batches to avoid rate limiting
+      if (i + batchSize < importInvoices.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    console.log(`📍 Invoice creation completed: ${results.successful} successful, ${results.failed} failed`);
     
     res.json({ 
       success: true,
       summary: {
-        successful: importInvoices.length,
-        failed: 0
+        successful: results.successful,
+        failed: results.failed
       },
-      message: `Would create ${importInvoices.length} invoices in Visma (Vercel mock response)`,
-      invoices_found: importInvoices.length,
-      note: 'Full Visma API integration requires local development server.'
+      message: `Created ${results.successful} invoices in Visma. ${results.failed} failed.`,
+      errors: results.errors.slice(0, 10), // Limit errors to avoid response size issues
+      invoices_processed: importInvoices.length
     });
   } catch (error) {
     console.error('📍 Create direct invoices error:', error);
