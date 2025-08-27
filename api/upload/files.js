@@ -1,4 +1,10 @@
-const { setCors, getSession } = require('../_utils');
+// Inline CORS function for Vercel
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+}
 const formidable = require('formidable'); // Use standard require for formidable v3
 const XLSX = require('xlsx');
 const fs = require('fs');
@@ -93,15 +99,16 @@ module.exports = async (req, res) => {
       console.warn('Could not clean up temp file:', err.message);
     }
 
-    // Return success response
+    // Return success response in the format expected by frontend
     res.json({ 
-      success: true,
       import_id: import_id,
-      message: `Successfully processed ${processedInvoices.length} invoices from ${uploadedFile.originalFilename}`,
-      invoices: processedInvoices.slice(0, 5), // Return first 5 as preview
-      total_count: processedInvoices.length,
-      errors: [], // <-- ADD THIS EMPTY ARRAY
-      note: 'Excel file processed successfully in Vercel!'
+      filename: uploadedFile.originalFilename,
+      status: 'completed',
+      total_rows: processedInvoices.length,
+      valid_rows: processedInvoices.length,
+      errors: [],
+      pdf_files: [], // PDFs not handled in Vercel yet
+      message: `Successfully processed ${processedInvoices.length} invoices from ${uploadedFile.originalFilename}`
     });
     
   } catch (error) {
