@@ -101,6 +101,32 @@ module.exports = async (req, res) => {
 
     const apiBaseUrl = tokens.instance_url || 'https://eaccountingapi.vismaonline.com';
 
+    // Get terms of payment ID once for all invoices
+    let termsOfPaymentId = null;
+    try {
+      const termsResp = await axios.get(`${apiBaseUrl}/v2/termsofpayments`, {
+        headers: {
+          'Authorization': `Bearer ${tokens.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Use the first available terms of payment (typically "Net 30" or similar)
+      if (termsResp.data && termsResp.data.length > 0) {
+        termsOfPaymentId = termsResp.data[0].id;
+        console.log(`📍 Using terms of payment: ${termsResp.data[0].name} (${termsOfPaymentId})`);
+      }
+    } catch (termsErr) {
+      console.log('📍 Could not fetch terms of payment:', termsErr.response?.data || termsErr.message);
+    }
+
+    if (!termsOfPaymentId) {
+      return res.status(500).json({
+        error: 'Could not fetch required terms of payment from Visma',
+        note: 'Terms of payment are required for invoice creation'
+      });
+    }
+
     // Process invoices in batches to avoid timeout
     const batchSize = 5;
     for (let i = 0; i < importInvoices.length; i += batchSize) {
@@ -163,7 +189,7 @@ module.exports = async (req, res) => {
             throw new Error('No article mapping found for status OK');
           }
 
-          // Create invoice
+          // Create invoice with all required fields
           const invoiceData = {
             customerId: customerId,
             invoiceDate: new Date().toISOString().split('T')[0],
@@ -171,6 +197,12 @@ module.exports = async (req, res) => {
             currency: invoice.currency || 'NOK',
             yourReference: invoice.your_reference || '',
             ourReference: invoice.referanse,
+            // Required fields that were missing
+            termsOfPaymentId: termsOfPaymentId,
+            invoiceCity: customerDefaults.city || 'Oslo',
+            invoicePostalCode: customerDefaults.postalCode || '0001',
+            invoiceAddress: customerDefaults.address || 'Ukjent adresse',
+            invoiceCountry: customerDefaults.country || 'NO',
             rows: [{
               articleId: articleId,
               description: `Transport service - ${invoice.avsender} to ${invoice.mottaker}`,
