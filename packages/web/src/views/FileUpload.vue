@@ -195,6 +195,12 @@ interface UploadResult {
     size: number
     hasText: boolean
   }>
+  _vercel_import_data?: {
+    invoices: any[]
+    timestamp: string
+    filename: string
+    total_count: number
+  }
 }
 
 interface ImportItem {
@@ -326,7 +332,9 @@ const generateInvoicesDirect = async () => {
     // 1) Create draft invoices in memory from uploaded Excel
     generationProgress.value = { current: 1, total: 4, message: 'Processing Excel data...' }
     const processResp = await axios.post('/api/invoices/process-import', {
-      import_id: uploadResult.value.import_id
+      import_id: uploadResult.value.import_id,
+      // Pass import data for Vercel stateless environment
+      import_data: (uploadResult.value as any)?._vercel_import_data
     })
 
     // 2) Create invoice drafts directly in Visma with PDF attachments
@@ -381,6 +389,8 @@ const processSpecificImport = async (importId: number) => {
     // 1) Create draft invoices in memory from uploaded Excel
     const processResp = await axios.post('/api/invoices/process-import', {
       import_id: importId
+      // Note: processSpecificImport doesn't have access to original import data
+      // This will only work if the data is still in global storage (local server)
     })
 
     // 2) Create invoice drafts directly in Visma with PDF attachments
