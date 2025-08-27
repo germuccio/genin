@@ -155,9 +155,13 @@ module.exports = async (req, res) => {
       
       for (const invoice of batch) {
         try {
+          console.log(`📍 Processing invoice: ${invoice.referanse}`);
+          
           // Create customer if needed
           let customerId = null;
           const customerName = invoice.mottaker || 'Unknown Customer';
+          
+          console.log(`📍 Searching for customer: ${customerName}`);
           
           // Try to find existing customer first
           try {
@@ -171,12 +175,16 @@ module.exports = async (req, res) => {
               }
             });
             
+            console.log(`📍 Customer search response:`, customerSearchResp.data);
+            
             if (customerSearchResp.data && customerSearchResp.data.length > 0) {
               customerId = customerSearchResp.data[0].id;
               console.log(`📍 Found existing customer: ${customerName} (${customerId})`);
+            } else {
+              console.log(`📍 No existing customer found for: ${customerName}`);
             }
           } catch (searchErr) {
-            console.log('📍 Customer search failed, will create new customer');
+            console.log('📍 Customer search failed:', searchErr.response?.status, searchErr.response?.data || searchErr.message);
           }
           
           // Create customer if not found
