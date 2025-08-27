@@ -41,11 +41,8 @@ module.exports = async (req, res) => {
   const isSandbox = clientId.includes('sandbox') || clientId.includes('test') ||
                    req.headers['x-visma-environment'] === 'sandbox';
   
-  // Prefer explicit env override, else choose by sandbox/prod
-  const configuredIdentityUrl = process.env.VISMA_IDENTITY_URL;
-  const identityBaseUrl = configuredIdentityUrl || (isSandbox
-    ? 'https://identity-sandbox.vismaonline.com'
-    : 'https://identity.vismaonline.com');
+  // Both sandbox and production use the same identity server
+  const identityBaseUrl = process.env.VISMA_IDENTITY_URL || 'https://identity.vismaonline.com';
 
   const auth_url = `${identityBaseUrl}/connect/authorize?${params.toString()}`;
   return res.json({ auth_url, redirect_uri: redirectUri, state, environment: isSandbox ? 'sandbox' : 'production' });
