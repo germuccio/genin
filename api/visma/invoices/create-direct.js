@@ -1,4 +1,29 @@
-const { getVismaTokensFromCookie } = require('../../../_utils');
+// Inline cookie parsing function for Vercel
+function parseCookies(cookieHeader) {
+  const cookies = {};
+  if (!cookieHeader) return cookies;
+  
+  cookieHeader.split(';').forEach((part) => {
+    const [k, ...v] = part.trim().split('=');
+    if (!k) return;
+    cookies[k] = decodeURIComponent(v.join('='));
+  });
+  
+  return cookies;
+}
+
+function getVismaTokensFromCookie(req) {
+  const cookies = parseCookies(req.headers.cookie || '');
+  if (cookies['visma-tokens']) {
+    try {
+      return JSON.parse(cookies['visma-tokens']);
+    } catch (e) {
+      console.error('Error parsing visma-tokens cookie:', e);
+      return null;
+    }
+  }
+  return null;
+}
 
 module.exports = async (req, res) => {
   // Set CORS headers
