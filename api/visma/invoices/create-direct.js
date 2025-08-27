@@ -43,7 +43,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log('📍 Create direct invoices endpoint called - v2.3');
+    console.log('📍 Create direct invoices endpoint called - v2.4');
     // console.log('📍 Request body:', req.body); // Keep this commented out for cleaner logs
     console.log('📍 Request headers cookies:', req.headers.cookie ? 'Present' : 'Missing');
     
@@ -213,10 +213,12 @@ module.exports = async (req, res) => {
             }
           }
           
-          // Get article ID from mapping
           const articleId = articleMapping.ok || articleMapping['OK'] || null;
           if (!articleId) {
-            throw new Error('No article mapping found for status OK');
+            console.error(`[${invoice.referanse}] CRITICAL: No article mapping found for status OK. Skipping invoice.`);
+            results.failed++;
+            results.errors.push(`${invoice.referanse}: No article mapping found for status OK`);
+            continue;
           }
 
           // Create invoice with all required fields (using PascalCase like local server)
@@ -251,22 +253,44 @@ module.exports = async (req, res) => {
 
           // Add terms of payment
           invoiceData.TermsOfPaymentId = termsOfPaymentId;
-
-          console.log(`[${invoice.referanse}] Sending final invoice data to Visma...`);
-          const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
-            headers: {
-              'Authorization': `Bearer ${tokens.access_token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id})`);
-          results.successful++;
           
+          console.log(`[${invoice.referanse}] Preparing to POST invoice.`);
+          console.log(`[${invoice.referanse}] API URL: POST ${apiBaseUrl}/v2/invoices`);
+          console.log(`[${invoice.referanse}] CustomerId: ${invoiceData.CustomerId}`);
+          console.log(`[${invoice.referanse}] ArticleId: ${invoiceData.Rows[0].ArticleId}`);
+          console.log(`[${invoice.referanse}] TermsOfPaymentId: ${invoiceData.TermsOfPaymentId}`);
+
+          try {
+            const invoiceResp = await axios.post(`${apiBaseUrl}/v2/invoices`, invoiceData, {
+              headers: {
+                'Authorization': `Bearer ${tokens.access_token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id})`);
+            results.successful++;
+
+          } catch (error) {
+            console.error(`❌ [${invoice.referanse}] Invoice creation failed.`);
+            if (error.response) {
+              console.error(`[${invoice.referanse}] Status: ${error.response.status}`);
+              console.error(`[${invoice.referanse}] Headers:`, JSON.stringify(error.response.headers));
+              console.error(`[${invoice.referanse}] Data:`, JSON.stringify(error.response.data));
+            } else if (error.request) {
+              console.error(`[${invoice.referanse}] No response received.`);
+            } else {
+              console.error(`[${invoice.referanse}] Error setting up request:`, error.message);
+            }
+            
+            results.failed++;
+            results.errors.push(`${invoice.referanse}: ${error.response?.data?.DeveloperErrorMessage || error.message}`);
+          }
         } catch (error) {
-          console.error(`❌ Failed to create invoice ${invoice.referanse}:`, error.response?.data ? JSON.stringify(error.response.data) : error.message);
-          results.failed++;
-          results.errors.push(`${invoice.referanse}: ${error.response?.data?.DeveloperErrorMessage || error.response?.data?.message || error.message}`);
+            // This outer catch is for logic errors before the API call
+            console.error(`❌ [${invoice.referanse}] A critical logic error occurred:`, error.message);
+            results.failed++;
+            results.errors.push(`${invoice.referanse}: Logic error - ${error.message}`);
         }
       }
       
