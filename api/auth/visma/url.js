@@ -27,6 +27,7 @@ module.exports = async (req, res) => {
 
   // Add the discovery scope required to find the instance_url
   const scope = 'ea:api ea:sales ea:purchase ea:accounting vls:api offline_access discovery-api:read';
+  const serviceId = '44643EB1-3F76-4C1C-A672-402AE8085934'; // Restoring the required serviceId
 
   const params = new URLSearchParams({
     client_id: clientId,
