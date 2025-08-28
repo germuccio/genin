@@ -105,6 +105,7 @@ module.exports = async (req, res) => {
         
         // Store the import_data for PDF attachment
         import_data = storedData;
+        console.log(`📍 Using ${importInvoices.length} invoices from stored data recovery`);
       } else {
         console.log(`❌ CRITICAL: No stored data found for import_id: ${import_id}`);
         console.log(`📍 Available import IDs:`, Object.keys(global.processedImports || {}));
@@ -521,18 +522,18 @@ module.exports = async (req, res) => {
       },
       message: `Created ${results.successful} invoices in Visma. ${results.failed} failed. ${remainingInvoices} remaining.`,
       errors: results.errors.slice(0, 10),
+      // Always include processing_info for continue functionality
+      processing_info: remainingInvoices > 0 ? {
+        import_id: import_id,
+        has_remaining: true,
+        remaining: remainingInvoices,
+        next_start_index: actualProcessedCount,
+        total: totalInvoices,
+        processed_so_far: actualProcessedCount
+      } : null,
       invoices_processed: actualProcessedCount,
       invoice_results: invoiceResults,
       invoice_attachments: invoiceAttachments,
-      // Information for resuming processing
-      processing_info: {
-        import_id: import_id,
-        start_index: startIndex,
-        end_index: actualProcessedCount,
-        chunk_size: chunkSize,
-        next_start_index: remainingInvoices > 0 ? actualProcessedCount : null,
-        has_remaining: remainingInvoices > 0
-      },
       note: remainingInvoices > 0 
         ? `Processed ${actualProcessedCount}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
         : 'All invoices processed with status tracking.'
