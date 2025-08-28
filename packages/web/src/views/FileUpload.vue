@@ -354,14 +354,14 @@ const generateInvoicesDirect = async () => {
 
     generationProgress.value = { current: 3, total: 4, message: 'Creating invoices in Visma...' }
     const directResp = await axios.post('/api/visma/invoices/create-direct', {
-      import_id: uploadResult.value.import_id,
+      import_id: uploadResult.value?.import_id,
       articleMapping,
       customerDefaults,
       customerOverrides,
       // Pass processed invoices for Vercel stateless environment
       processed_invoices: processResp.data.processed_invoices,
-      
-      import_data: uploadResult.value._vercel_import_data || null
+      // Pass import data as fallback for Vercel stateless environment (only if available)
+      ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data })
     })
 
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
@@ -416,7 +416,8 @@ const processSpecificImport = async (importId: number) => {
       customerOverrides,
       // Pass processed invoices for Vercel stateless environment
       processed_invoices: processResp.data.processed_invoices,
-      import_data: uploadResult.value._vercel_import_data || null
+      // Note: processSpecificImport doesn't have access to uploadResult, so we can't pass import_data
+      // This will work with the backend fallback logic
     })
 
     alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
