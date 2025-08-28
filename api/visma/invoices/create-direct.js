@@ -374,30 +374,61 @@ module.exports = async (req, res) => {
                   }
                 }
                 
-                if (pdfToAttach) {
+                if (pdfToAttach && pdfToAttach.content) {
                   console.log(`[${invoice.referanse}] Found PDF to attach: ${pdfToAttach.filename}`);
                   
-                  // Instead of trying to attach here, we'll return the PDF info
-                  // and let the frontend handle attachment separately
-                  console.log(`[${invoice.referanse}] PDF attachment will be handled separately to avoid data transmission issues`);
+                  // Attach PDF to Visma invoice using their attachments API
+                  const attachmentData = {
+                    DocumentId: invoiceResp.data.Id, // Use the newly created invoice ID
+                    DocumentType: 'CustomerInvoiceDraft',
+                    FileName: pdfToAttach.filename,
+                    FileSize: pdfToAttach.size,
+                    ContentType: pdfToAttach.mimetype,
+                    Data: pdfToAttach.content.toString('base64')
+                  };
                   
-                  // Store PDF info for later attachment
-                  if (!invoiceAttachments[invoice.referanse]) {
-                    invoiceAttachments[invoice.referanse] = [];
+                  const attachmentResponse = await axios.post(
+                    `${apiBaseUrl}/v2/salesdocumentattachments`,
+                    attachmentData,
+                    {
+                      headers: {
+                        'Authorization': `Bearer ${tokens.access_token}`,
+                        'Content-Type': 'application/json'
+                      }
+                    }
+                  );
+                  
+                  if (attachmentResponse.status === 200 || attachmentResponse.status === 201) {
+                    console.log(`✅ PDF attached successfully to invoice ${invoiceResp.data.Id}`);
+                    // Track successful attachment
+                    if (!invoiceAttachments[invoiceResp.data.Id]) {
+                      invoiceAttachments[invoiceResp.data.Id] = [];
+                    }
+                    invoiceAttachments[invoiceResp.data.Id].push({
+                      filename: pdfToAttach.filename,
+                      status: 'attached',
+                      visma_attachment_id: attachmentResponse.data?.Id || 'unknown'
+                    });
+                  } else {
+                    console.warn(`⚠️ PDF attachment response unexpected: ${attachmentResponse.status}`);
                   }
-                  invoiceAttachments[invoice.referanse].push({
-                    filename: pdfToAttach.filename,
-                    size: pdfToAttach.size,
-                    mimetype: pdfToAttach.mimetype,
-                    index: pdfToAttach.index,
-                    id: pdfToAttach.id
-                  });
                 } else {
-                  console.log(`[${invoice.referanse}] No PDF data available for attachment`);
+                  console.log(`[${invoice.referanse}] PDF content not available for attachment`);
                 }
               } catch (error) {
-                console.error(`[${invoice.referanse}] Error preparing PDF attachment:`, error);
+                console.error(`❌ PDF attachment failed for invoice ${invoiceResp.data.Id}:`, error.response?.data || error.message);
+                // Track failed attachment
+                if (!invoiceAttachments[invoiceResp.data.Id]) {
+                  invoiceAttachments[invoiceResp.data.Id] = [];
+                }
+                invoiceAttachments[invoiceResp.data.Id].push({
+                  filename: pdfToAttach?.filename || 'unknown',
+                  status: 'failed',
+                  error: error.response?.data || error.message
+                });
               }
+            } else {
+              console.log(`[${invoice.referanse}] No PDF to attach`);
             }
             
             results.successful++;

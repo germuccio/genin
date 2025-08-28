@@ -135,7 +135,7 @@ module.exports = async (req, res) => {
       
       pdfArray.forEach((pdfFile, index) => {
         try {
-          // Generate a unique ID for this PDF
+          // Generate a unique ID for this PDF that can be referenced later
           const pdfId = `pdf_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
           
           // Store PDF metadata with a unique ID for later reference
@@ -145,10 +145,9 @@ module.exports = async (req, res) => {
             size: pdfFile.size,
             mimetype: pdfFile.mimetype,
             index: index,
-            // Store the file path temporarily (will be cleaned up)
-            tempPath: pdfFile.filepath,
-            // Note: In Vercel, we can't store the actual PDF content permanently
-            // The frontend will need to handle PDF storage or we'll implement a different approach
+            // Store the actual file content temporarily in memory (for this request only)
+            // This will be used immediately for PDF attachment, then discarded
+            content: pdfFile.buffer || (pdfFile.filepath ? fs.readFileSync(pdfFile.filepath) : null)
           });
           console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (ID: ${pdfId})`);
         } catch (error) {
