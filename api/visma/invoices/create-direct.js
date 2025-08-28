@@ -520,10 +520,12 @@ module.exports = async (req, res) => {
 
     console.log(`📍 Invoice creation completed: ${results.successful} successful, ${results.failed} failed`);
     
-    // Calculate remaining invoices
+    // Calculate remaining invoices based on actual processing
     const totalInvoices = importInvoices.length;
-    const processedInvoices = endIndex;
-    const remainingInvoices = totalInvoices - processedInvoices;
+    const actualProcessedCount = startIndex + results.successful + results.failed;
+    const remainingInvoices = totalInvoices - actualProcessedCount;
+    
+    console.log(`📍 Processing summary: started at ${startIndex}, processed ${results.successful + results.failed}, remaining ${remainingInvoices}`);
     
     res.json({ 
       success: true,
@@ -531,25 +533,25 @@ module.exports = async (req, res) => {
         successful: results.successful,
         failed: results.failed,
         total: totalInvoices,
-        processed: processedInvoices,
+        processed: actualProcessedCount,
         remaining: remainingInvoices
       },
       message: `Created ${results.successful} invoices in Visma. ${results.failed} failed. ${remainingInvoices} remaining.`,
       errors: results.errors.slice(0, 10),
-      invoices_processed: processedInvoices,
+      invoices_processed: actualProcessedCount,
       invoice_results: invoiceResults,
       invoice_attachments: invoiceAttachments,
       // Information for resuming processing
       processing_info: {
         import_id: import_id,
         start_index: startIndex,
-        end_index: endIndex,
+        end_index: actualProcessedCount,
         chunk_size: chunkSize,
-        next_start_index: remainingInvoices > 0 ? endIndex : null,
+        next_start_index: remainingInvoices > 0 ? actualProcessedCount : null,
         has_remaining: remainingInvoices > 0
       },
       note: remainingInvoices > 0 
-        ? `Processed ${processedInvoices}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
+        ? `Processed ${actualProcessedCount}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
         : 'All invoices processed with status tracking.'
     });
     } catch (error) {
@@ -568,15 +570,15 @@ module.exports = async (req, res) => {
     let partialProcessingInfo = null;
     if (typeof results !== 'undefined' && results.successful > 0) {
       const totalInvoices = importInvoices?.length || 0;
-      const processedInvoices = startIndex + results.successful + results.failed;
-      const remainingInvoices = totalInvoices - processedInvoices;
+      const actualProcessedCount = startIndex + results.successful + results.failed;
+      const remainingInvoices = totalInvoices - actualProcessedCount;
       
       partialProcessingInfo = {
         import_id: import_id,
         start_index: startIndex,
-        end_index: processedInvoices,
+        end_index: actualProcessedCount,
         chunk_size: chunkSize,
-        next_start_index: remainingInvoices > 0 ? processedInvoices : null,
+        next_start_index: remainingInvoices > 0 ? actualProcessedCount : null,
         has_remaining: remainingInvoices > 0
       };
     }
