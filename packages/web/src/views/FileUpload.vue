@@ -178,7 +178,6 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import Papa from 'papaparse'
 import type { UploadedFile, Invoice, ImportResult, GenerationProgress, RecentImport, CustomerData } from '../types'
 
 const router = useRouter()
