@@ -459,6 +459,10 @@ const createInvoicesInVisma = async () => {
         console.log('🔍 DEBUG: Set processingInfo.value:', processingInfo.value)
         console.log('🔍 DEBUG: hasIncompleteProcessing computed:', hasIncompleteProcessing.value)
         try { localStorage.setItem('processingInfo', JSON.stringify(processingInfo.value)) } catch {}
+        // Kick off auto-continue on partial completion
+        if (response.data.summary?.remaining > 0) {
+          autoContinueProcessing()
+        }
       } else {
         console.log('🔍 DEBUG: No processing_info in response:', response.data)
       }
@@ -545,6 +549,18 @@ const continueProcessing = async () => {
   try {
     console.log('🔄 Continuing invoice processing from index:', processingInfo.value.next_start_index)
 
+    // Load processed invoices and import data from localStorage
+    let processedInvoices: any[] = []
+    let importData: any = null
+    try {
+      const saved = localStorage.getItem('lastUploadResult')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        processedInvoices = parsed.data?.processed_invoices || []
+        importData = parsed.data?._vercel_import_data || null
+      }
+    } catch {}
+
     // Create the continue processing request
     const continueRequest = {
       start_index: processingInfo.value.next_start_index,
@@ -553,7 +569,9 @@ const continueProcessing = async () => {
       articleMapping: { ok: '69f95c2e-255d-4836-9df1-3a4961bc417b' }, // This should come from the original request
       customerDefaults: customerDefaults.value,
       customerOverrides: perCustomerOverrides.value,
-      // The backend should still have the processed_invoices and import_data stored globally
+      // Provide data again in case server had a cold start
+      processed_invoices: processedInvoices,
+      ...(importData && { import_data: importData })
     }
 
     const response = await axios.post('/api/visma/invoices/create-direct', continueRequest)
@@ -563,18 +581,19 @@ const continueProcessing = async () => {
     // Update processing info
     if (response.data.processing_info) {
       processingInfo.value = response.data.processing_info
+      try { localStorage.setItem('processingInfo', JSON.stringify(processingInfo.value)) } catch {}
     }
     
     const successCount = response.data.summary?.successful || 0
     const remainingCount = response.data.summary?.remaining || 0
     
     if (remainingCount > 0) {
-      try { localStorage.setItem('processingInfo', JSON.stringify(processingInfo.value)) } catch {}
-      alert(`✅ Successfully processed ${successCount} more invoices!\n\n⏳ ${remainingCount} invoices still remaining. Click "Continue Processing" again to process the rest.`)
+      alert(`✅ Successfully processed ${successCount} more invoices!\n\n⏳ ${remainingCount} invoices still remaining. Processing will continue automatically...`)
     } else {
       alert(`✅ Successfully processed ${successCount} more invoices!\n\n🎉 All invoices have been processed!`)
       processingInfo.value = null // Clear processing info
       try { localStorage.removeItem('processingInfo') } catch {}
+      try { localStorage.removeItem('lastUploadResult') } catch {}
     }
     
     // Refresh to show the newly created invoices
@@ -585,8 +604,26 @@ const continueProcessing = async () => {
     const errorMessage = err.response?.data?.error || err.message || 'Failed to continue processing invoices'
     error.value = errorMessage
     alert(`❌ Failed to continue processing: ${errorMessage}`)
+    throw err
   } finally {
     isContinuingProcessing.value = false
+  }
+}
+
+// Auto-continue until completion when processingInfo is present
+let isAutoContinuing = false
+const autoContinueProcessing = async () => {
+  if (isAutoContinuing) return
+  if (!processingInfo.value?.has_remaining) return
+  isAutoContinuing = true
+  try {
+    while (processingInfo.value?.has_remaining) {
+      await continueProcessing()
+      // Small delay to avoid overwhelming API
+      await new Promise(r => setTimeout(r, 300))
+    }
+  } finally {
+    isAutoContinuing = false
   }
 }
 
@@ -747,6 +784,10 @@ onMounted(() => {
     if (stored) {
       processingInfo.value = JSON.parse(stored)
       console.log('🔍 DEBUG: Restored processingInfo from localStorage:', processingInfo.value)
+      // Auto-continue if there is remaining work
+      if (processingInfo.value?.has_remaining) {
+        autoContinueProcessing()
+      }
     }
   } catch {}
   loadInvoices()
