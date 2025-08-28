@@ -204,6 +204,10 @@ module.exports = async (req, res) => {
     // Process invoices in batches to avoid timeout
     console.log(`📍 Starting to process ${importInvoices.length} invoices in batches...`);
     const batchSize = 5;
+    
+    // Track PDF attachments for later processing
+    const invoiceAttachments = {};
+    
     for (let i = 0; i < importInvoices.length; i += batchSize) {
       const batch = importInvoices.slice(i, i + batchSize);
       console.log(`📍 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(importInvoices.length/batchSize)}`);
@@ -371,29 +375,29 @@ module.exports = async (req, res) => {
                 }
                 
                 if (pdfToAttach) {
-                  console.log(`[${invoice.referanse}] Found PDF metadata: ${pdfToAttach.filename} (${pdfToAttach.size} bytes)`);
+                  console.log(`[${invoice.referanse}] Found PDF to attach: ${pdfToAttach.filename}`);
                   
-                  // Since we can't store PDF content in Vercel, we'll create a placeholder attachment
-                  // In a production environment, you would need to:
-                  // 1. Store PDFs in a cloud storage service (S3, Azure Blob, etc.)
-                  // 2. Or implement a separate PDF upload endpoint that handles the actual file content
-                  // 3. Or use Visma's file upload capabilities if they support direct file uploads
+                  // Instead of trying to attach here, we'll return the PDF info
+                  // and let the frontend handle attachment separately
+                  console.log(`[${invoice.referanse}] PDF attachment will be handled separately to avoid data transmission issues`);
                   
-                  console.log(`[${invoice.referanse}] ⚠️ PDF attachment skipped - Vercel environment limitation`);
-                  console.log(`[${invoice.referanse}] PDF metadata available: ${pdfToAttach.filename} (${pdfToAttach.size} bytes)`);
-                  
-                  // TODO: Implement actual PDF attachment when cloud storage is available
-                  // For now, we'll just log that the PDF should be attached
-                  
+                  // Store PDF info for later attachment
+                  if (!invoiceAttachments[invoice.referanse]) {
+                    invoiceAttachments[invoice.referanse] = [];
+                  }
+                  invoiceAttachments[invoice.referanse].push({
+                    filename: pdfToAttach.filename,
+                    size: pdfToAttach.size,
+                    mimetype: pdfToAttach.mimetype,
+                    index: pdfToAttach.index,
+                    id: pdfToAttach.id
+                  });
                 } else {
-                  console.log(`[${invoice.referanse}] No PDF metadata found for attachment`);
+                  console.log(`[${invoice.referanse}] No PDF data available for attachment`);
                 }
-                
               } catch (error) {
-                console.warn(`⚠️ PDF attachment failed for invoice ${invoice.referanse}:`, error);
+                console.error(`[${invoice.referanse}] Error preparing PDF attachment:`, error);
               }
-            } else {
-              console.log(`[${invoice.referanse}] No PDF data available for attachment`);
             }
             
             results.successful++;
@@ -437,7 +441,9 @@ module.exports = async (req, res) => {
       },
       message: `Created ${results.successful} invoices in Visma. ${results.failed} failed.`,
       errors: results.errors.slice(0, 10), // Limit errors to avoid response size issues
-      invoices_processed: importInvoices.length
+      invoices_processed: importInvoices.length,
+      invoice_attachments: invoiceAttachments,
+      note: 'PDF attachments need to be handled separately using the /api/visma/invoices/attach-pdf endpoint'
     });
   } catch (error) {
     console.error('📍 Create direct invoices error:', error);
