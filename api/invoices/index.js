@@ -36,7 +36,7 @@ module.exports = async (req, res) => {
           // Filter drafts that might match this import (by reference or other criteria)
           const importDrafts = drafts.filter(draft => {
             // Look for drafts with references that might match the import
-            const reference = draft.YourReference || draft.OurReference || '';
+            const reference = draft.OurReference || draft.YourReference || '';
             return reference.includes(import_id) || reference.includes('REF-');
           });
           
@@ -99,8 +99,11 @@ module.exports = async (req, res) => {
             const reference = draft.OurReference || draft.YourReference || '';
             let importId = 'unknown';
             
-            // Try to extract import ID from reference
-            if (reference.includes('REF-')) {
+            // Try to extract import ID from reference - look for numeric references like 166091, 166090, etc.
+            if (reference && /^\d+$/.test(reference)) {
+              // If reference is a pure number, use it as import ID
+              importId = reference;
+            } else if (reference.includes('REF-')) {
               const match = reference.match(/REF-(\d+)/);
               if (match) importId = match[1];
             }
