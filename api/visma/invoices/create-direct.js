@@ -183,15 +183,22 @@ module.exports = async (req, res) => {
               headers: {
                 'Authorization': `Bearer ${tokens.access_token}`,
                 'Content-Type': 'application/json'
-              },
-              params: {
-                name: customerName
               }
+              // Note: Visma API doesn't filter by name, so we get all customers and filter client-side
             });
             
             if (customerSearchResp.data && customerSearchResp.data.Data && customerSearchResp.data.Data.length > 0) {
-              customerId = customerSearchResp.data.Data[0].Id;
-              console.log(`[${invoice.referanse}] Found existing customer: ${customerName} (${customerId})`);
+              // Filter customers by name on the client side since Visma API doesn't support name filtering
+              const matchingCustomers = customerSearchResp.data.Data.filter(customer => 
+                customer.Name && customer.Name.toLowerCase().includes(customerName.toLowerCase())
+              );
+              
+              if (matchingCustomers.length > 0) {
+                customerId = matchingCustomers[0].Id;
+                console.log(`[${invoice.referanse}] Found existing customer: ${customerName} (${customerId})`);
+              } else {
+                console.log(`[${invoice.referanse}] Customer not found, will create.`);
+              }
             } else {
                console.log(`[${invoice.referanse}] Customer not found, will create.`);
             }
