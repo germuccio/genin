@@ -61,8 +61,15 @@ module.exports = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
     
-    const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices } = req.body;
-    console.log('📍 Parsed request data:', { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices: processed_invoices ? `${processed_invoices.length} invoices` : 'none' });
+    const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices, import_data } = req.body;
+    console.log('📍 Parsed request data:', { 
+      import_id, 
+      articleMapping, 
+      customerDefaults, 
+      customerOverrides, 
+      processed_invoices: processed_invoices ? `${processed_invoices.length} invoices` : 'none',
+      import_data: import_data ? `Available with ${import_data.invoices?.length || 0} invoices` : 'none'
+    });
     
     if (!import_id) {
       return res.status(400).json({ error: 'import_id is required' });
@@ -76,22 +83,39 @@ module.exports = async (req, res) => {
     } else if (typeof processed_invoices === 'string') {
       console.log(`⚠️ WARNING: processed_invoices is a string: "${processed_invoices}"`);
       console.log(`📍 This indicates a frontend data transformation issue`);
-      console.log(`📍 Falling back to using import data from request body`);
       
-      // Try to get invoices from the request body or other sources
-      // For now, we'll create invoices with default data since we can't access the original
-      const invoiceCount = parseInt(processed_invoices.match(/\d+/)?.[0] || '0');
-      if (invoiceCount > 0) {
-        console.log(`📍 Creating ${invoiceCount} invoices with default data`);
+      // Try to reconstruct invoices from import_data if available
+      if (import_data && import_data.invoices && Array.isArray(import_data.invoices)) {
+        console.log(`📍 Reconstructing invoices from import_data with ${import_data.invoices.length} invoices`);
+        importInvoices = import_data.invoices.map((invoice, index) => ({
+          referanse: invoice.our_reference || `REF-${Date.now()}-${index}`,
+          mottaker: invoice.mottaker || `Customer ${index + 1}`,
+          avsender: invoice.avsender || 'Default Sender',
+          amount: invoice.amount || 414,
+          currency: invoice.currency || 'NOK',
+          declaration_pdf: import_data.pdfs && import_data.pdfs[index] ? {
+            filename: import_data.pdfs[index].filename,
+            size: import_data.pdfs[index].size,
+            mimetype: import_data.pdfs[index].mimetype,
+            index: import_data.pdfs[index].index
+          } : null
+        }));
+        console.log(`📍 Successfully reconstructed ${importInvoices.length} invoices with PDF data`);
+      } else {
+        console.log(`📍 No import_data available, creating placeholder invoices`);
         // Create placeholder invoices - this is not ideal but will allow the process to continue
-        for (let i = 0; i < invoiceCount; i++) {
-          importInvoices.push({
-            referanse: `REF-${Date.now()}-${i}`,
-            mottaker: `Customer ${i + 1}`,
-            avsender: 'Default Sender',
-            amount: 414, // Default amount
-            currency: 'NOK'
-          });
+        const invoiceCount = parseInt(processed_invoices.match(/\d+/)?.[0] || '0');
+        if (invoiceCount > 0) {
+          console.log(`📍 Creating ${invoiceCount} invoices with default data`);
+          for (let i = 0; i < invoiceCount; i++) {
+            importInvoices.push({
+              referanse: `REF-${Date.now()}-${i}`,
+              mottaker: `Customer ${i + 1}`,
+              avsender: 'Default Sender',
+              amount: 414, // Default amount
+              currency: 'NOK'
+            });
+          }
         }
       }
     } else {
@@ -300,7 +324,7 @@ module.exports = async (req, res) => {
               ArticleId: articleId,
               Description: `Transport service - ${invoice.referanse}`,
               Quantity: 1,
-              UnitPrice: invoice.unit_price || 414,
+              UnitPrice: invoice.unit_price || invoice.amount || 414,
               VatRate: 25, // Standard Norwegian VAT
               LineNumber: 1,
               IsWorkCost: false,
