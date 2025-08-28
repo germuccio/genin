@@ -381,9 +381,11 @@ const generateInvoicesDirect = async () => {
     // Show success message
     alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
     
-    // Clear the upload result since invoices have been generated
+    // Clear the upload result state in memory; keep persisted data until completion
     uploadResult.value = null
-    localStorage.removeItem('lastUploadResult')
+    if (remaining === 0) {
+      localStorage.removeItem('lastUploadResult')
+    }
     
     // If remaining, navigate user to invoices list to continue
     if (remaining > 0) {
