@@ -50,6 +50,10 @@ module.exports = async (req, res) => {
 
     const uploadedFile = Array.isArray(fileArray) ? fileArray[0] : fileArray;
     console.log('📄 Processing file:', uploadedFile.originalFilename);
+    
+    // Check if PDFs were uploaded
+    const pdfFiles = req.files?.pdf || [];
+    console.log(`📄 PDF files received: ${pdfFiles.length}`);
 
     // Read the Excel file
     const fileBuffer = fs.readFileSync(uploadedFile.filepath);
@@ -76,10 +80,10 @@ module.exports = async (req, res) => {
         id: index + 1,
         mottaker: String(row.Mottaker || row.mottaker || '').trim(),
         your_reference: String(row['Your Reference'] || row.your_reference || '').trim(),
-        our_reference: String(row['Our Reference'] || row.our_reference || '').trim(),
+        our_reference: String(row.Referanse || row['Referanse'] || '').trim(), // Fixed: Use actual Excel column name
         avsender: String(row.Avsender || row.avsender || '').trim(),
         status: 'ok', // Default status
-        amount: parseFloat(row.Amount || row.amount || 414), // Default amount
+        amount: parseFloat(row['Valutabeløp'] || row.Valutabelop || row.Amount || row.amount || 414), // Use actual Excel amount column
         currency: String(row.Currency || row.currency || 'NOK').trim(),
         raw_data: row
       };
@@ -99,9 +103,32 @@ module.exports = async (req, res) => {
     // Generate import ID
     const import_id = Date.now().toString();
     
+    // Process PDF files if any
+    const processedPdfs = [];
+    if (pdfFiles.length > 0) {
+      console.log(`📄 Processing ${pdfFiles.length} PDF files...`);
+      pdfFiles.forEach((pdfFile, index) => {
+        try {
+          // Store PDF info (in Vercel we can't store files permanently, so we store metadata)
+          processedPdfs.push({
+            filename: pdfFile.originalFilename,
+            size: pdfFile.size,
+            mimetype: pdfFile.mimetype,
+            index: index,
+            // Note: In Vercel, we can't store the actual PDF content permanently
+            // The frontend will need to handle PDF storage or the create-direct endpoint will need to process them
+          });
+          console.log(`✅ Processed PDF: ${pdfFile.originalFilename}`);
+        } catch (error) {
+          console.error(`❌ Error processing PDF ${pdfFile.originalFilename}:`, error);
+        }
+      });
+    }
+
     // Store processed data in memory
     global.processedImports[import_id] = {
       invoices: processedInvoices,
+      pdfs: processedPdfs,
       timestamp: new Date().toISOString(),
       filename: uploadedFile.originalFilename,
       total_count: processedInvoices.length
@@ -124,11 +151,12 @@ module.exports = async (req, res) => {
       total_rows: processedInvoices.length,
       valid_rows: processedInvoices.length,
       errors: [],
-      pdf_files: [], // PDFs not handled in Vercel yet
+      pdf_files: processedPdfs, // Now includes processed PDF metadata
       message: `Successfully processed ${processedInvoices.length} invoices from ${uploadedFile.originalFilename}`,
       // Include the processed data for Vercel stateless environment
       _vercel_import_data: {
         invoices: processedInvoices,
+        pdfs: processedPdfs,
         timestamp: new Date().toISOString(),
         filename: uploadedFile.originalFilename,
         total_count: processedInvoices.length
