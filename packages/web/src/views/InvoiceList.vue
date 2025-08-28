@@ -428,14 +428,34 @@ const createInvoicesInVisma = async () => {
       }
     }
 
-    const requestData = {
-      customerDefaults: customerDefaults.value,
-      customerOverrides: perCustomerOverrides.value,
-      articleMapping: articleMapping,
-      ...(import_id && { import_id }) // Include import_id if available (Vercel)
+    // Get the processed invoices from localStorage (same as FileUpload.vue)
+    const lastUpload = localStorage.getItem('lastUploadResult')
+    let processedInvoices = []
+    let importData = null
+    
+    if (lastUpload) {
+      try {
+        const uploadData = JSON.parse(lastUpload)
+        processedInvoices = uploadData.data?.processed_invoices || []
+        importData = uploadData.data?._vercel_import_data || null
+        import_id = uploadData.data?.import_id || import_id
+      } catch (e) {
+        console.warn('Could not parse upload result:', e)
+      }
     }
 
-    const response = await axios.post('/api/invoices/create-in-visma', requestData)
+    const requestData = {
+      import_id: import_id,
+      articleMapping: articleMapping,
+      customerDefaults: customerDefaults.value,
+      customerOverrides: perCustomerOverrides.value,
+      // Pass processed invoices for Vercel stateless environment
+      processed_invoices: processedInvoices,
+      // Pass import data as fallback for Vercel stateless environment
+      ...(importData && { import_data: importData })
+    }
+
+    const response = await axios.post('/api/visma/invoices/create-direct', requestData)
     
     if (response.data.success) {
       // Handle both local and Vercel API response formats
