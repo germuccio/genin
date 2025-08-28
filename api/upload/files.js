@@ -52,8 +52,15 @@ module.exports = async (req, res) => {
     console.log('📄 Processing file:', uploadedFile.originalFilename);
     
     // Check if PDFs were uploaded
-    const pdfFiles = req.files?.pdf || [];
-    console.log(`📄 PDF files received: ${pdfFiles.length}`);
+    const pdfFiles = files.pdf || [];
+    console.log(`📄 PDF files received: ${Array.isArray(pdfFiles) ? pdfFiles.length : 0}`);
+    if (Array.isArray(pdfFiles) && pdfFiles.length > 0) {
+      console.log('📄 PDF file details:', pdfFiles.map(pdf => ({
+        filename: pdf.originalFilename,
+        size: pdf.size,
+        mimetype: pdf.mimetype
+      })));
+    }
 
     // Read the Excel file
     const fileBuffer = fs.readFileSync(uploadedFile.filepath);
@@ -105,9 +112,12 @@ module.exports = async (req, res) => {
     
     // Process PDF files if any
     const processedPdfs = [];
-    if (pdfFiles.length > 0) {
-      console.log(`📄 Processing ${pdfFiles.length} PDF files...`);
-      pdfFiles.forEach((pdfFile, index) => {
+    if (pdfFiles && (Array.isArray(pdfFiles) ? pdfFiles.length > 0 : pdfFiles)) {
+      // Handle both single file and array cases
+      const pdfArray = Array.isArray(pdfFiles) ? pdfFiles : [pdfFiles];
+      console.log(`📄 Processing ${pdfArray.length} PDF files...`);
+      
+      pdfArray.forEach((pdfFile, index) => {
         try {
           // Store PDF info (in Vercel we can't store files permanently, so we store metadata)
           processedPdfs.push({
@@ -123,6 +133,8 @@ module.exports = async (req, res) => {
           console.error(`❌ Error processing PDF ${pdfFile.originalFilename}:`, error);
         }
       });
+    } else {
+      console.log('📄 No PDF files uploaded');
     }
 
     // Store processed data in memory

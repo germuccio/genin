@@ -128,21 +128,28 @@ module.exports = async (req, res) => {
             available_imports: availableImports,
             total_invoices: drafts.length,
             // Also return all invoices for the frontend to display
-            invoices: drafts.map(draft => ({
-              id: draft.Id,
-              referanse: draft.OurReference || draft.YourReference || `REF-${draft.Id}`,
-              your_reference: draft.YourReference,
-              mottaker: draft.CustomerName || 'Unknown',
-              avsender: 'Genin',
-              status: 'draft',
-              total_cents: Math.round((draft.Amount || 0) * 100),
-              unit_price: draft.Amount || 0,
-              currency: draft.CurrencyCode || 'NOK',
-              created_at: draft.CreatedDateTime || new Date().toISOString(),
-              visma_invoice_id: draft.Id,
-              filename: `Import ${draft.OurReference || 'Unknown'}`,
-              import_id: draft.OurReference || 'unknown'
-            })),
+            invoices: drafts.map(draft => {
+              // Calculate total from line items since Visma doesn't populate Amount field for drafts
+              const totalAmount = draft.Rows && draft.Rows.length > 0 
+                ? draft.Rows.reduce((sum, row) => sum + (row.UnitPrice * row.Quantity), 0)
+                : 414; // Fallback to preset price
+              
+              return {
+                id: draft.Id,
+                referanse: draft.OurReference || draft.YourReference || `REF-${draft.Id}`,
+                your_reference: draft.YourReference,
+                mottaker: draft.CustomerName || 'Unknown',
+                avsender: 'Genin',
+                status: 'draft',
+                total_cents: Math.round(totalAmount * 100),
+                unit_price: totalAmount,
+                currency: draft.CurrencyCode || 'NOK',
+                created_at: draft.CreatedDateTime || new Date().toISOString(),
+                visma_invoice_id: draft.Id,
+                filename: `Import ${draft.OurReference || 'Unknown'}`,
+                import_id: draft.OurReference || 'unknown'
+              };
+            }),
             note: availableImports.length === 0 ? 'No imports found. Upload an Excel file first.' : undefined
           });
           
