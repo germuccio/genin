@@ -71,6 +71,9 @@ module.exports = async (req, res) => {
       import_data: import_data ? `Available with ${import_data.invoices?.length || 0} invoices` : 'none'
     });
     
+    // Work with a mutable copy for fallbacks below
+    let importDataLocal = import_data;
+    
     if (!import_id) {
       return res.status(400).json({ error: 'import_id is required' });
     }
@@ -80,6 +83,23 @@ module.exports = async (req, res) => {
     if (Array.isArray(processed_invoices)) {
       importInvoices = processed_invoices;
       console.log(`📍 Using ${importInvoices.length} invoices from processed_invoices array`);
+      // If array is empty but we have import_data with invoices, reconstruct from it
+      if (importInvoices.length === 0 && importDataLocal && Array.isArray(importDataLocal.invoices) && importDataLocal.invoices.length > 0) {
+        console.log(`⚠️ processed_invoices empty but import_data has ${importDataLocal.invoices.length} invoices. Reconstructing from import_data...`);
+        importInvoices = importDataLocal.invoices.map((invoice, index) => ({
+          referanse: invoice.our_reference || invoice.referanse || `REF-${Date.now()}-${index}`,
+          mottaker: invoice.mottaker || `Customer ${index + 1}`,
+          avsender: invoice.avsender || 'Default Sender',
+          currency: invoice.currency || 'NOK',
+          declaration_pdf: importDataLocal.pdfs && importDataLocal.pdfs[index] ? {
+            filename: importDataLocal.pdfs[index].filename,
+            size: importDataLocal.pdfs[index].size,
+            mimetype: importDataLocal.pdfs[index].mimetype,
+            index: importDataLocal.pdfs[index].index
+          } : null
+        }));
+        console.log(`📍 Reconstructed ${importInvoices.length} invoices from import_data`);
+      }
     } else if (typeof processed_invoices === 'string') {
       console.log(`⚠️ WARNING: processed_invoices is a string: "${processed_invoices}"`);
       console.log(`📍 This indicates data corruption during transmission - using stored data instead`);
@@ -104,7 +124,7 @@ module.exports = async (req, res) => {
         console.log(`📍 Successfully reconstructed ${importInvoices.length} invoices from stored data`);
         
         // Store the import_data for PDF attachment
-        import_data = storedData;
+        importDataLocal = storedData;
         console.log(`📍 Using ${importInvoices.length} invoices from stored data recovery`);
       } else {
         console.log(`❌ CRITICAL: No stored data found for import_id: ${import_id}`);
@@ -387,11 +407,11 @@ module.exports = async (req, res) => {
               
                 // Get PDF data from import_data if available
                 let pdfToAttach = null;
-                if (import_data && import_data.pdfs && Array.isArray(import_data.pdfs)) {
+                if (importDataLocal && importDataLocal.pdfs && Array.isArray(importDataLocal.pdfs)) {
                   // Find PDF by index or filename
                   const pdfIndex = invoice.declaration_pdf?.index || 0;
-                  if (import_data.pdfs[pdfIndex]) {
-                    pdfToAttach = import_data.pdfs[pdfIndex];
+                  if (importDataLocal.pdfs[pdfIndex]) {
+                    pdfToAttach = importDataLocal.pdfs[pdfIndex];
                   }
                 }
                 
