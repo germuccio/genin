@@ -269,6 +269,7 @@ module.exports = async (req, res) => {
               Name: customerName, // Use PascalCase for customer creation too
               Email: `test+${Date.now()}@example.com`, // Visma requires an email
               IsPrivatePerson: false,
+              IsActive: true, // Add missing IsActive field
               // Add required fields for customer creation
               InvoiceCity: customerDefaults.city || "Oslo",
               InvoicePostalCode: customerDefaults.postalCode || "0001",

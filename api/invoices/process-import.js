@@ -2,47 +2,36 @@
 global.invoices = global.invoices || [];
 
 module.exports = async (req, res) => {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+  console.log('📍 Process import endpoint called');
+  
   try {
-    console.log('📍 Process import endpoint called');
-    const { import_id, import_data } = req.body;
+    const { import_id } = req.body;
     
     if (!import_id) {
-      return res.status(400).json({ error: 'import_id is required' });
+      return res.status(400).json({ error: 'Import ID is required' });
     }
 
     console.log('📍 Looking for import_id:', import_id);
-    console.log('📍 Available imports:', Object.keys(global.processedImports || {}));
 
-    // Try to get data from global storage first (for compatibility)
-    let importData = null;
-    if (global.processedImports && global.processedImports[import_id]) {
-      importData = global.processedImports[import_id];
-      console.log('📍 Found import data in global storage with', importData.invoices.length, 'invoices');
-    } else if (import_data) {
-      // Fallback: accept import data in request body (for Vercel stateless environment)
-      importData = import_data;
+    // Try to get import data from global storage first (for local development)
+    let importData = global.imports?.find(imp => imp.id === parseInt(import_id));
+    
+    if (!importData) {
+      // For Vercel, try to get data from request body
+      console.log('📍 No global import data found, checking request body...');
+      importData = req.body.import_data;
+      
+      if (!importData) {
+        console.log('📍 No import data in request body either');
+        return res.status(404).json({ 
+          error: `Import ${import_id} not found`,
+          note: 'In Vercel, import data must be passed in the request body'
+        });
+      }
+      
       console.log('📍 Using import data from request body with', importData.invoices?.length || 0, 'invoices');
     } else {
-      console.log('📍 No import data found in global storage or request body');
-      return res.status(404).json({ 
-        error: 'Import not found',
-        available_imports: Object.keys(global.processedImports || {}),
-        note: 'In Vercel serverless environment, data may not persist between function calls'
-      });
+      console.log('📍 Found import data in global storage with', importData.invoices?.length || 0, 'invoices');
     }
 
     if (!importData || !importData.invoices) {

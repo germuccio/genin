@@ -392,9 +392,9 @@ const processSpecificImport = async (importId: number) => {
   try {
     // 1) Create draft invoices in memory from uploaded Excel
     const processResp = await axios.post('/api/invoices/process-import', {
-      import_id: importId
-      // Note: processSpecificImport doesn't have access to original import data
-      // This will only work if the data is still in global storage (local server)
+      import_id: importId,
+      // Pass import data for Vercel stateless environment
+      import_data: uploadResult.value?._vercel_import_data
     })
 
     // 2) Create invoice drafts directly in Visma with PDF attachments
