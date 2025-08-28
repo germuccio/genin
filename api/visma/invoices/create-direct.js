@@ -208,7 +208,7 @@ module.exports = async (req, res) => {
     
     // Track processing time to avoid Vercel timeout
     const startTime = Date.now();
-    const maxProcessingTime = 8000; // 8 seconds to leave buffer for response
+    const maxProcessingTime = 9500; // 9.5 seconds to leave 0.5s buffer for response
     
     // Track PDF attachments for later processing
     const invoiceAttachments = {};
@@ -369,13 +369,13 @@ module.exports = async (req, res) => {
               }
             });
 
-            console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id})`);
+            console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id}) - ${results.successful + 1}/${importInvoices.length} completed`);
             
             // Try to attach PDF if available (same logic as working locally)
             if (invoice.declaration_pdf || invoice.pdf_data) {
               // Check timeout before PDF attachment (PDF attachment takes extra time)
               const currentElapsedTime = Date.now() - startTime;
-              if (currentElapsedTime > maxProcessingTime - 2000) { // Leave 2 seconds buffer
+              if (currentElapsedTime > maxProcessingTime - 1000) { // Leave 1 second buffer
                 console.log(`⏰ Skipping PDF attachment due to timeout risk (${currentElapsedTime}ms)`);
               } else {
                 try {
