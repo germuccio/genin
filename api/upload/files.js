@@ -138,18 +138,30 @@ module.exports = async (req, res) => {
           // Generate a unique ID for this PDF that can be referenced later
           const pdfId = `pdf_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
           
-          // Store PDF metadata with a unique ID for later reference
+          // Read the PDF file content and store it temporarily for immediate attachment
+          let pdfContent = null;
+          try {
+            if (pdfFile.filepath) {
+              pdfContent = fs.readFileSync(pdfFile.filepath);
+            } else if (pdfFile.buffer) {
+              pdfContent = pdfFile.buffer;
+            }
+          } catch (readError) {
+            console.warn(`⚠️ Could not read PDF content for ${pdfFile.originalFilename}:`, readError.message);
+          }
+          
+          // Store PDF metadata with content for immediate Visma attachment
           processedPdfs.push({
             id: pdfId,
             filename: pdfFile.originalFilename,
             size: pdfFile.size,
             mimetype: pdfFile.mimetype,
             index: index,
-            // Store the actual file content temporarily in memory (for this request only)
-            // This will be used immediately for PDF attachment, then discarded
-            content: pdfFile.buffer || (pdfFile.filepath ? fs.readFileSync(pdfFile.filepath) : null)
+            // Store the actual file content temporarily for immediate attachment
+            // This will be used right away and then discarded
+            content: pdfContent
           });
-          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (ID: ${pdfId})`);
+          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (ID: ${pdfId}, Size: ${pdfContent ? pdfContent.length : 0} bytes)`);
         } catch (error) {
           console.error(`❌ Error processing PDF ${pdfFile.originalFilename}:`, error);
         }
