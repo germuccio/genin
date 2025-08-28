@@ -91,7 +91,7 @@ module.exports = async (req, res) => {
           referanse: invoice.our_reference || `REF-${Date.now()}-${index}`,
           mottaker: invoice.mottaker || `Customer ${index + 1}`,
           avsender: invoice.avsender || 'Default Sender',
-          amount: invoice.amount || 414,
+          amount: (() => { const excelAmount = invoice.amount || invoice.Valutabeløp || invoice.Valutabelop || invoice.Amount || 414; return typeof excelAmount === "number" ? excelAmount : parseFloat(excelAmount) || 414; })(), unit_price: (() => { const excelAmount = invoice.amount || invoice.Valutabeløp || invoice.Valutabelop || invoice.Amount || 414; return typeof excelAmount === "number" ? excelAmount : parseFloat(excelAmount) || 414; })(),
           currency: invoice.currency || 'NOK',
           declaration_pdf: import_data.pdfs && import_data.pdfs[index] ? {
             filename: import_data.pdfs[index].filename,
