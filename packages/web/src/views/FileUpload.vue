@@ -175,14 +175,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import type { UploadedFile, Invoice, ImportResult, GenerationProgress, RecentImport, CustomerData } from '../types'
-
-const router = useRouter()
-const files = ref<File[]>([])
-const pdfs = ref<File[]>([])
 
 interface SelectedFiles {
   excel: File | null
@@ -378,23 +372,22 @@ const generateInvoicesDirect = async () => {
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
     console.log('✅ Direct invoice creation completed:', directResp.data)
     
-    const summary = directResp.data.summary
-    const processingInfo = directResp.data.processing_info
-
-    if (processingInfo && processingInfo.has_remaining) {
-      // Partial success, need to continue
-      localStorage.setItem('processingInfo', JSON.stringify(processingInfo))
-      
-      alert(`✅ Partially completed! Created ${summary.successful} of ${summary.total} invoices.\n\nYou will now be taken to the Invoices page to continue the process.`)
-      
-      router.push('/invoices')
-    } else {
-      // Full success
-      alert(`✅ Success! Created ${summary.successful} invoice drafts directly with PDF attachments. ${summary.failed} failed.`)
-      
-      // Clear the upload result since invoices have been generated
-      uploadResult.value = null
-      localStorage.removeItem('lastUploadResult')
+    // If there are remaining invoices, persist processing_info for the Invoices page
+    const remaining = directResp.data?.summary?.remaining || 0
+    if (remaining > 0 && directResp.data?.processing_info) {
+      try { localStorage.setItem('processingInfo', JSON.stringify(directResp.data.processing_info)) } catch {}
+    }
+    
+    // Show success message
+    alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
+    
+    // Clear the upload result since invoices have been generated
+    uploadResult.value = null
+    localStorage.removeItem('lastUploadResult')
+    
+    // If remaining, navigate user to invoices list to continue
+    if (remaining > 0) {
+      try { (window as any).location.href = '/invoices' } catch {}
     }
     
     // Refresh recent imports to show updated status

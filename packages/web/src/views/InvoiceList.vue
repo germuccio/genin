@@ -458,6 +458,7 @@ const createInvoicesInVisma = async () => {
         processingInfo.value = response.data.processing_info
         console.log('🔍 DEBUG: Set processingInfo.value:', processingInfo.value)
         console.log('🔍 DEBUG: hasIncompleteProcessing computed:', hasIncompleteProcessing.value)
+        try { localStorage.setItem('processingInfo', JSON.stringify(processingInfo.value)) } catch {}
       } else {
         console.log('🔍 DEBUG: No processing_info in response:', response.data)
       }
@@ -469,6 +470,7 @@ const createInvoicesInVisma = async () => {
           alert(`✅ Successfully created ${created} invoices in Visma eAccounting!\n\n⏳ ${remainingCount} invoices remaining. Click "Continue Processing" to process the rest.`)
         } else {
           alert(`✅ Successfully created ${created} invoices in Visma eAccounting!`)
+          try { localStorage.removeItem('processingInfo') } catch {}
         }
         // Refresh the invoice list to show updated Visma IDs
         await loadInvoices()
@@ -567,10 +569,12 @@ const continueProcessing = async () => {
     const remainingCount = response.data.summary?.remaining || 0
     
     if (remainingCount > 0) {
+      try { localStorage.setItem('processingInfo', JSON.stringify(processingInfo.value)) } catch {}
       alert(`✅ Successfully processed ${successCount} more invoices!\n\n⏳ ${remainingCount} invoices still remaining. Click "Continue Processing" again to process the rest.`)
     } else {
       alert(`✅ Successfully processed ${successCount} more invoices!\n\n🎉 All invoices have been processed!`)
       processingInfo.value = null // Clear processing info
+      try { localStorage.removeItem('processingInfo') } catch {}
     }
     
     // Refresh to show the newly created invoices
@@ -736,22 +740,16 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString('nb-NO')
 }
 
-onMounted(async () => {
-  // Check for pending processing info from the upload page
-  const pendingProcessingInfo = localStorage.getItem('processingInfo')
-  if (pendingProcessingInfo) {
-    try {
-      processingInfo.value = JSON.parse(pendingProcessingInfo)
-      // Remove it from storage so it's not reused on next visit
-      localStorage.removeItem('processingInfo')
-      console.log('🔍 DEBUG: Loaded pending processingInfo from upload page:', processingInfo.value)
-    } catch (e) {
-      console.error('Failed to parse pending processing info:', e)
-      localStorage.removeItem('processingInfo')
+onMounted(() => {
+  // Restore pending processing info (if upload flow created partial results)
+  try {
+    const stored = localStorage.getItem('processingInfo')
+    if (stored) {
+      processingInfo.value = JSON.parse(stored)
+      console.log('🔍 DEBUG: Restored processingInfo from localStorage:', processingInfo.value)
     }
-  }
-
-  await loadInvoices()
+  } catch {}
+  loadInvoices()
 })
 </script>
 
