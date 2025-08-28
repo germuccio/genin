@@ -175,8 +175,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
+import Papa from 'papaparse'
+import type { UploadedFile, Invoice, ImportResult, GenerationProgress, RecentImport, CustomerData } from '../types'
+
+const router = useRouter()
+const files = ref<File[]>([])
+const pdfs = ref<File[]>([])
 
 interface SelectedFiles {
   excel: File | null
@@ -372,12 +379,24 @@ const generateInvoicesDirect = async () => {
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
     console.log('✅ Direct invoice creation completed:', directResp.data)
     
-    // Show success message
-    alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
-    
-    // Clear the upload result since invoices have been generated
-    uploadResult.value = null
-    localStorage.removeItem('lastUploadResult')
+    const summary = directResp.data.summary
+    const processingInfo = directResp.data.processing_info
+
+    if (processingInfo && processingInfo.has_remaining) {
+      // Partial success, need to continue
+      localStorage.setItem('processingInfo', JSON.stringify(processingInfo))
+      
+      alert(`✅ Partially completed! Created ${summary.successful} of ${summary.total} invoices.\n\nYou will now be taken to the Invoices page to continue the process.`)
+      
+      router.push('/invoices')
+    } else {
+      // Full success
+      alert(`✅ Success! Created ${summary.successful} invoice drafts directly with PDF attachments. ${summary.failed} failed.`)
+      
+      // Clear the upload result since invoices have been generated
+      uploadResult.value = null
+      localStorage.removeItem('lastUploadResult')
+    }
     
     // Refresh recent imports to show updated status
     await loadRecentImports()

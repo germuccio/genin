@@ -736,8 +736,22 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString('nb-NO')
 }
 
-onMounted(() => {
-  loadInvoices()
+onMounted(async () => {
+  // Check for pending processing info from the upload page
+  const pendingProcessingInfo = localStorage.getItem('processingInfo')
+  if (pendingProcessingInfo) {
+    try {
+      processingInfo.value = JSON.parse(pendingProcessingInfo)
+      // Remove it from storage so it's not reused on next visit
+      localStorage.removeItem('processingInfo')
+      console.log('🔍 DEBUG: Loaded pending processingInfo from upload page:', processingInfo.value)
+    } catch (e) {
+      console.error('Failed to parse pending processing info:', e)
+      localStorage.removeItem('processingInfo')
+    }
+  }
+
+  await loadInvoices()
 })
 </script>
 
