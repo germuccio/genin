@@ -252,7 +252,7 @@ app.get('/api/auth/visma/url', (req, res) => {
   // Allow per-user client id via headers, fallback to default
   const clientId = (req.headers['x-visma-client-id'] as string) || 'aiautomationsandbox';
   const redirectUri = 'https://localhost:44300/callback'; // Must match Visma registration
-  const scope = 'ea:api ea:sales ea:purchase ea:accounting vls:api offline_access';
+  const scope = 'ea:api ea:sales ea:purchase ea:accounting offline_access';
   
   const authUrl = `${VISMA_IDENTITY_URL}/connect/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&state=${state}&prompt=select_account&acr_values=service:44643EB1-3F76-4C1C-A672-402AE8085934`;
   

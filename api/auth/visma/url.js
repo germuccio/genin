@@ -25,8 +25,8 @@ module.exports = async (req, res) => {
   const stateSig = signSession(statePayload);
   const state = `${stateBody}.${stateSig}`;
 
-  // Restore the original scopes, removing the invalid 'discovery-api:read'
-  const scope = 'ea:api ea:sales ea:purchase ea:accounting vls:api offline_access';
+  // Remove vls:api scope as it's not needed and causes invalid_scope error
+  const scope = 'ea:api ea:sales ea:purchase ea:accounting offline_access';
   const serviceId = '44643EB1-3F76-4C1C-A672-402AE8085934'; // Restoring the required serviceId
 
   const params = new URLSearchParams({
