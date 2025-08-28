@@ -7,6 +7,7 @@ function setCors(res) {
 }
 const formidable = require('formidable'); // Use standard require for formidable v3
 const XLSX = require('xlsx');
+const fs = require('fs'); // Needed for file operations
 
 
 // Simple in-memory storage for processed data (resets on serverless cold start)
@@ -62,8 +63,23 @@ module.exports = async (req, res) => {
       })));
     }
 
-    // Read the Excel file
-    const fileBuffer = fs.readFileSync(uploadedFile.filepath);
+    // Read the Excel file - try different approaches for different environments
+    let fileBuffer;
+    try {
+      // First try to read from filepath (local development)
+      if (uploadedFile.filepath) {
+        fileBuffer = fs.readFileSync(uploadedFile.filepath);
+      } else if (uploadedFile.buffer) {
+        // If we have a buffer directly (Vercel)
+        fileBuffer = uploadedFile.buffer;
+      } else {
+        throw new Error('No file data available');
+      }
+    } catch (err) {
+      console.error('❌ Failed to read Excel file:', err.message);
+      return res.status(500).json({ error: 'Failed to read uploaded Excel file' });
+    }
+    
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
     
     // Get the first worksheet
