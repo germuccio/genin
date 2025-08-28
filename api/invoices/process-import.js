@@ -83,7 +83,7 @@ module.exports = async (req, res) => {
           service_description: 'Transport service',
           
           // PDF attachment info (placeholder - PDFs not handled in Vercel yet)
-          declaration_pdf: null,
+          declaration_pdf: importData.pdfs && importData.pdfs[index] ? { filename: importData.pdfs[index].filename, size: importData.pdfs[index].size, mimetype: importData.pdfs[index].mimetype, index: importData.pdfs[index].index } : null,
           
           filename: importData.filename,
           row_data: uploadedInvoice.raw_data
