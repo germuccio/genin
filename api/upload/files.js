@@ -138,7 +138,7 @@ module.exports = async (req, res) => {
           // Generate a unique ID for this PDF that can be referenced later
           const pdfId = `pdf_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
           
-          // Read the PDF file content and store it temporarily for immediate attachment
+          // Read the PDF file content and store it for attachment (same as local)
           let pdfContent = null;
           try {
             if (pdfFile.filepath) {
@@ -150,15 +150,14 @@ module.exports = async (req, res) => {
             console.warn(`⚠️ Could not read PDF content for ${pdfFile.originalFilename}:`, readError.message);
           }
           
-          // Store PDF metadata with content for immediate Visma attachment
+          // Store PDF metadata with content for Visma attachment (same as local)
           processedPdfs.push({
             id: pdfId,
             filename: pdfFile.originalFilename,
             size: pdfFile.size,
             mimetype: pdfFile.mimetype,
             index: index,
-            // Store the actual file content temporarily for immediate attachment
-            // This will be used right away and then discarded
+            // Store the actual file content for immediate attachment (same as local)
             content: pdfContent
           });
           console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (ID: ${pdfId}, Size: ${pdfContent ? pdfContent.length : 0} bytes)`);

@@ -359,7 +359,7 @@ module.exports = async (req, res) => {
 
             console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id})`);
             
-            // Try to attach PDF if available
+            // Try to attach PDF if available (same logic as local)
             if (invoice.declaration_pdf || invoice.pdf_data) {
               try {
                 console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
@@ -377,9 +377,9 @@ module.exports = async (req, res) => {
                 if (pdfToAttach && pdfToAttach.content) {
                   console.log(`[${invoice.referanse}] Found PDF to attach: ${pdfToAttach.filename}`);
                   
-                  // Attach PDF to Visma invoice using their attachments API
+                  // Attach PDF to Visma invoice using their attachments API (same as local)
                   const attachmentData = {
-                    DocumentId: invoiceResp.data.Id, // Use the newly created invoice ID
+                    DocumentId: invoiceResp.data.Id,
                     DocumentType: 'CustomerInvoiceDraft',
                     FileName: pdfToAttach.filename,
                     FileSize: pdfToAttach.size,
