@@ -113,6 +113,7 @@ module.exports = async (req, res) => {
               mottaker: `Customer ${i + 1}`,
               avsender: 'Default Sender',
               amount: 414, // Default amount
+              unit_price: 414, // Set both for compatibility
               currency: 'NOK'
             });
           }
@@ -324,7 +325,7 @@ module.exports = async (req, res) => {
               ArticleId: articleId,
               Description: `Transport service - ${invoice.referanse}`,
               Quantity: 1,
-              UnitPrice: invoice.unit_price || invoice.amount || 414,
+              UnitPrice: (() => { const amount = invoice.unit_price || invoice.amount || 414; console.log(`[${invoice.referanse}] Amount calculation: unit_price=${invoice.unit_price}, amount=${invoice.amount}, final=${amount}`); return amount; })(),
               VatRate: 25, // Standard Norwegian VAT
               LineNumber: 1,
               IsWorkCost: false,
