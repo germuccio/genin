@@ -82,9 +82,9 @@ module.exports = async (req, res) => {
       console.log(`📍 Using ${importInvoices.length} invoices from processed_invoices array`);
     } else if (typeof processed_invoices === 'string') {
       console.log(`⚠️ WARNING: processed_invoices is a string: "${processed_invoices}"`);
-      console.log(`📍 This indicates a frontend data transformation issue`);
+      console.log(`📍 This indicates data corruption during transmission - using stored data instead`);
       
-        // Try to get data from global storage first
+      // ALWAYS use global storage for corrupted data - this is more reliable
       if (global.processedImports && global.processedImports[import_id]) {
         const storedData = global.processedImports[import_id];
         console.log(`📍 Found stored data for import_id: ${import_id} with ${storedData.invoices.length} invoices`);
@@ -105,25 +105,15 @@ module.exports = async (req, res) => {
         
         // Store the import_data for PDF attachment
         import_data = storedData;
-      }
-      // Try to reconstruct invoices from import_data if available
-      else if (import_data && import_data.invoices && Array.isArray(import_data.invoices)) {
-        console.log(`📍 Reconstructing invoices from import_data with ${import_data.invoices.length} invoices`);
-        importInvoices = import_data.invoices.map((invoice, index) => ({
-          referanse: invoice.our_reference || `REF-${Date.now()}-${index}`,
-          mottaker: invoice.mottaker || `Customer ${index + 1}`,
-          avsender: invoice.avsender || 'Default Sender',
-          // Do NOT set amount or unit_price - let preset system handle it
-          currency: invoice.currency || 'NOK',
-          declaration_pdf: import_data.pdfs && import_data.pdfs[index] ? {
-            filename: import_data.pdfs[index].filename,
-            size: import_data.pdfs[index].size,
-            mimetype: import_data.pdfs[index].mimetype,
-            index: import_data.pdfs[index].index
-          } : null
-        }));
-        console.log(`📍 Successfully reconstructed ${importInvoices.length} invoices with PDF data`);
       } else {
+        console.log(`❌ CRITICAL: No stored data found for import_id: ${import_id}`);
+        console.log(`📍 Available import IDs:`, Object.keys(global.processedImports || {}));
+        return res.status(400).json({ 
+          error: 'Data corruption detected and no backup data available. Please re-upload your files.',
+          details: 'The request payload was corrupted during transmission and no stored data was found.'
+        });
+      }
+    } else {
         console.log(`📍 No import_data available, creating placeholder invoices`);
         // Create placeholder invoices - this is not ideal but will allow the process to continue
         const invoiceCount = parseInt(processed_invoices.match(/\d+/)?.[0] || '0');
@@ -237,8 +227,19 @@ module.exports = async (req, res) => {
     
     console.log(`📍 Processing chunk: invoices ${startIndex + 1}-${endIndex} of ${importInvoices.length}`);
     
+    // Add timeout tracking to prevent Vercel timeout
+    const processingStartTime = Date.now();
+    const MAX_PROCESSING_TIME = 8500; // 8.5 seconds to leave buffer
+    
     // Process only the current chunk
     for (let i = startIndex; i < endIndex; i++) {
+      // Check if we're approaching timeout
+      const elapsedTime = Date.now() - processingStartTime;
+      if (elapsedTime > MAX_PROCESSING_TIME) {
+        console.log(`⏰ Approaching timeout (${elapsedTime}ms), stopping at invoice ${i + 1}/${importInvoices.length}`);
+        break;
+      }
+      
       const invoice = importInvoices[i];
       console.log(`📍 Processing invoice ${i + 1}/${importInvoices.length}: ${invoice.referanse}`);
       

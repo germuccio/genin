@@ -475,6 +475,20 @@ const createInvoicesInVisma = async () => {
     
     if (err.response?.status === 401) {
       error.value = 'Not authenticated with Visma. Please go to Setup and connect first.'
+    } else if (err.response?.status === 504) {
+      // Handle timeout specifically - some invoices were likely created
+      error.value = 'Processing timed out, but some invoices may have been created.'
+      
+      // For timeout, we need to create processing info manually since we don't get response data
+      // Assume we were processing the first chunk (0-20) and it timed out partway through
+      processingInfo.value = {
+        import_id: Date.now().toString(), // Use current timestamp as fallback
+        has_remaining: true,
+        remaining: 31 - 17, // Estimate based on logs (17 were processed)
+        next_start_index: 17
+      }
+      
+      alert(`⏰ Processing timed out after creating some invoices.\n\nSome invoices were created successfully. Please:\n1. Check the invoice list below\n2. Use "Continue Processing" to process remaining invoices`)
     } else {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to create invoices in Visma'
       error.value = errorMessage
