@@ -119,16 +119,20 @@ module.exports = async (req, res) => {
       
       pdfArray.forEach((pdfFile, index) => {
         try {
-          // Store PDF info (in Vercel we can't store files permanently, so we store metadata)
+          // Read the PDF file content and encode as base64
+          const pdfBuffer = fs.readFileSync(pdfFile.filepath);
+          const pdfBase64 = pdfBuffer.toString('base64');
+          
+          // Store PDF info with content for Visma attachment
           processedPdfs.push({
             filename: pdfFile.originalFilename,
             size: pdfFile.size,
             mimetype: pdfFile.mimetype,
             index: index,
-            // Note: In Vercel, we can't store the actual PDF content permanently
-            // The frontend will need to handle PDF storage or the create-direct endpoint will need to process them
+            content: pdfBase64, // Base64 encoded PDF content for Visma attachment
+            // Note: In Vercel, we can't store files permanently, but we can send content directly to Visma
           });
-          console.log(`✅ Processed PDF: ${pdfFile.originalFilename}`);
+          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (${pdfFile.size} bytes, base64 encoded)`);
         } catch (error) {
           console.error(`❌ Error processing PDF ${pdfFile.originalFilename}:`, error);
         }

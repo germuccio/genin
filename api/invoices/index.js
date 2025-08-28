@@ -140,7 +140,7 @@ module.exports = async (req, res) => {
                 your_reference: draft.YourReference,
                 mottaker: draft.CustomerName || 'Unknown',
                 avsender: 'Genin',
-                status: 'draft',
+                status: 'CREATED_AS_DRAFT', // These invoices exist in Visma, so they're created as drafts
                 total_cents: Math.round(totalAmount * 100),
                 unit_price: totalAmount,
                 currency: draft.CurrencyCode || 'NOK',

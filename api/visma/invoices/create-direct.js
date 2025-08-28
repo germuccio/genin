@@ -360,15 +360,41 @@ module.exports = async (req, res) => {
               try {
                 console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
                 
-                // For now, log PDF attachment info since we can't store files permanently in Vercel
-                if (invoice.declaration_pdf) {
-                  console.log(`[${invoice.referanse}] PDF info: ${invoice.declaration_pdf.filename} (${invoice.declaration_pdf.size} bytes)`);
-                  console.log(`[${invoice.referanse}] Note: PDF attachment requires file storage (not available in Vercel serverless)`);
+                // Get PDF data from import_data if available
+                let pdfToAttach = null;
+                if (import_data && import_data.pdfs && Array.isArray(import_data.pdfs)) {
+                  // Find PDF by index or filename
+                  const pdfIndex = invoice.declaration_pdf?.index || 0;
+                  if (import_data.pdfs[pdfIndex]) {
+                    pdfToAttach = import_data.pdfs[pdfIndex];
+                  }
                 }
                 
-                if (invoice.pdf_data) {
-                  console.log(`[${invoice.referanse}] PDF data available: ${invoice.pdf_data.filename || 'unnamed'}`);
-                  console.log(`[${invoice.referanse}] Note: PDF attachment requires file storage (not available in Vercel serverless)`);
+                if (pdfToAttach && pdfToAttach.content) {
+                  // Attach PDF to Visma using their API
+                  const attachmentData = {
+                    DocumentId: invoiceResp.data.Id,
+                    DocumentType: 'CustomerInvoiceDraft',
+                    FileName: pdfToAttach.filename || `declaration_${invoice.referanse}.pdf`,
+                    FileContent: pdfToAttach.content, // Base64 encoded PDF content
+                    ContentType: pdfToAttach.mimetype || 'application/pdf'
+                  };
+                  
+                  try {
+                    const attachmentResp = await axios.post(`${apiBaseUrl}/v2/salesdocumentattachments/customerinvoicedraft`, attachmentData, {
+                      headers: {
+                        'Authorization': `Bearer ${tokens.access_token}`,
+                        'Content-Type': 'application/json'
+                      }
+                    });
+                    
+                    console.log(`✅ PDF attachment successful for invoice ${invoice.referanse}: ${pdfToAttach.filename}`);
+                  } catch (attachmentError) {
+                    console.warn(`⚠️ PDF attachment failed for invoice ${invoice.referanse}:`, attachmentError.response?.data || attachmentError.message);
+                  }
+                } else {
+                  console.log(`[${invoice.referanse}] PDF info: ${invoice.declaration_pdf?.filename || 'unknown'} (${invoice.declaration_pdf?.size || 0} bytes)`);
+                  console.log(`[${invoice.referanse}] Note: PDF content not available for attachment`);
                 }
                 
               } catch (pdfError) {
