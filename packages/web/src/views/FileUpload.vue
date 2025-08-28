@@ -359,7 +359,9 @@ const generateInvoicesDirect = async () => {
       customerDefaults,
       customerOverrides,
       // Pass processed invoices for Vercel stateless environment
-      processed_invoices: processResp.data.processed_invoices
+      processed_invoices: processResp.data.processed_invoices,
+      // Pass import data as fallback for Vercel stateless environment
+      import_data: uploadResult.value._vercel_import_data || null
     })
 
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
