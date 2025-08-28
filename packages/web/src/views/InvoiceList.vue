@@ -461,6 +461,8 @@ const createInvoicesInVisma = async () => {
         try { localStorage.setItem('processingInfo', JSON.stringify(processingInfo.value)) } catch {}
         // Kick off auto-continue on partial completion
         if (response.data.summary?.remaining > 0) {
+          // Set the flag BEFORE starting to suppress any blocking alerts
+          isAutoContinuing = true
           autoContinueProcessing()
         }
       } else {
