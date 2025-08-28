@@ -35,7 +35,7 @@ module.exports = async (req, res) => {
 
     // Prepare PDF attachment data
     const attachmentData = {
-      DocumentId: invoiceId,
+      DockumentId: invoiceId, // Note: Visma uses "DockumentId" not "DocumentId"
       DocumentType: 'CustomerInvoiceDraft',
       FileName: pdfData.filename || 'document.pdf',
       ContentType: 'application/pdf',

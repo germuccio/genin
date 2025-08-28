@@ -359,20 +359,75 @@ module.exports = async (req, res) => {
 
             console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id})`);
             
-            // Skip PDF attachment for now due to data transmission issues on Vercel
-            // The PDF data is being corrupted during transmission, causing import_data to be a string
-            // instead of an object with PDF content. This needs to be fixed at the frontend level.
-            console.log(`[${invoice.referanse}] PDF attachment skipped due to data transmission issues`);
-            
-            // Track that PDF attachment was skipped
-            if (!invoiceAttachments[invoiceResp.data.Id]) {
-              invoiceAttachments[invoiceResp.data.Id] = [];
+            // Try to attach PDF if available (same logic as working locally)
+            if (invoice.declaration_pdf || invoice.pdf_data) {
+              try {
+                console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
+                
+                // Get PDF data from import_data if available
+                let pdfToAttach = null;
+                if (import_data && import_data.pdfs && Array.isArray(import_data.pdfs)) {
+                  // Find PDF by index or filename
+                  const pdfIndex = invoice.declaration_pdf?.index || 0;
+                  if (import_data.pdfs[pdfIndex]) {
+                    pdfToAttach = import_data.pdfs[pdfIndex];
+                  }
+                }
+                
+                if (pdfToAttach && pdfToAttach.content) {
+                  console.log(`[${invoice.referanse}] Found PDF to attach: ${pdfToAttach.filename}`);
+                  
+                  // Attach PDF to Visma invoice using their attachments API (same as local)
+                  const attachmentData = {
+                    DockumentId: invoiceResp.data.Id, // Note: Visma uses "DockumentId" not "DocumentId"
+                    DocumentType: 'CustomerInvoiceDraft',
+                    FileName: pdfToAttach.filename,
+                    FileSize: pdfToAttach.size,
+                    ContentType: pdfToAttach.mimetype,
+                    Data: pdfToAttach.content // Content is already base64 encoded from upload
+                  };
+                  
+                  const attachmentResp = await axios.post(
+                    `${apiBaseUrl}/v2/salesdocumentattachments`,
+                    attachmentData,
+                    {
+                      headers: {
+                        'Authorization': `Bearer ${tokens.access_token}`,
+                        'Content-Type': 'application/json'
+                      }
+                    }
+                  );
+                  
+                  console.log(`✅ PDF attachment successful for invoice ${invoiceResp.data.Id}`);
+                  
+                  // Track successful attachment
+                  if (!invoiceAttachments[invoiceResp.data.Id]) {
+                    invoiceAttachments[invoiceResp.data.Id] = [];
+                  }
+                  invoiceAttachments[invoiceResp.data.Id].push({
+                    filename: pdfToAttach.filename,
+                    status: 'attached',
+                    attachmentId: attachmentResp.data.Id
+                  });
+                  
+                } else {
+                  console.log(`[${invoice.referanse}] No PDF content available for attachment`);
+                }
+                
+              } catch (pdfError) {
+                console.error(`❌ PDF attachment failed for invoice ${invoiceResp.data.Id}:`, pdfError.response?.data || pdfError.message);
+                
+                // Track failed attachment
+                if (!invoiceAttachments[invoiceResp.data.Id]) {
+                  invoiceAttachments[invoiceResp.data.Id] = [];
+                }
+                invoiceAttachments[invoiceResp.data.Id].push({
+                  filename: invoice.declaration_pdf?.filename || 'unknown.pdf',
+                  status: 'failed',
+                  error: pdfError.response?.data || pdfError.message
+                });
+              }
             }
-            invoiceAttachments[invoiceResp.data.Id].push({
-              filename: invoice.declaration_pdf?.filename || 'unknown.pdf',
-              status: 'skipped',
-              reason: 'Data transmission issue - PDF content not available on Vercel'
-            });
             
             results.successful++;
 

@@ -7,7 +7,7 @@ function setCors(res) {
 }
 const formidable = require('formidable'); // Use standard require for formidable v3
 const XLSX = require('xlsx');
-const fs = require('fs'); // Needed for file operations
+const fs = require('fs'); // Needed for reading PDF files
 
 
 // Simple in-memory storage for processed data (resets on serverless cold start)
