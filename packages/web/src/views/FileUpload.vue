@@ -351,9 +351,11 @@ const generateInvoicesDirect = async () => {
     })()
 
     console.log('Creating invoices directly with config:', { articleMapping, customerDefaults, customerOverrides })
+    console.log('🔍 DEBUG: processResp.data.processed_invoices:', processResp.data.processed_invoices)
+    console.log('🔍 DEBUG: uploadResult.value?._vercel_import_data:', uploadResult.value?._vercel_import_data)
 
     generationProgress.value = { current: 3, total: 4, message: 'Creating invoices in Visma...' }
-    const directResp = await axios.post('/api/visma/invoices/create-direct', {
+    const requestPayload = {
       import_id: uploadResult.value?.import_id,
       articleMapping,
       customerDefaults,
@@ -362,7 +364,10 @@ const generateInvoicesDirect = async () => {
       processed_invoices: processResp.data.processed_invoices,
       // Pass import data as fallback for Vercel stateless environment (only if available)
       ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data })
-    })
+    }
+    console.log('🔍 DEBUG: Full request payload:', requestPayload)
+    
+    const directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload)
 
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
     console.log('✅ Direct invoice creation completed:', directResp.data)
