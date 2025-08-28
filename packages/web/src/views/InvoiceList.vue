@@ -417,28 +417,18 @@ const createInvoicesInVisma = async () => {
 
   try {
     // Check if we have an import_id from recent upload (Vercel workflow)
-    const lastUpload = localStorage.getItem('lastUploadResult')
-    let import_id = null
-    if (lastUpload) {
-      try {
-        const uploadData = JSON.parse(lastUpload)
-        import_id = uploadData.data?.import_id
-      } catch (e) {
-        console.warn('Could not parse upload result:', e)
-      }
-    }
-
     // Get the processed invoices from localStorage (same as FileUpload.vue)
     const lastUpload = localStorage.getItem('lastUploadResult')
+    let import_id = null
     let processedInvoices = []
     let importData = null
     
     if (lastUpload) {
       try {
         const uploadData = JSON.parse(lastUpload)
+        import_id = uploadData.data?.import_id
         processedInvoices = uploadData.data?.processed_invoices || []
         importData = uploadData.data?._vercel_import_data || null
-        import_id = uploadData.data?.import_id || import_id
       } catch (e) {
         console.warn('Could not parse upload result:', e)
       }
