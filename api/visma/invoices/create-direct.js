@@ -467,7 +467,20 @@ module.exports = async (req, res) => {
             results.failed++;
             results.errors.push(`${invoice.referanse}: ${error.response?.data?.DeveloperErrorMessage || error.message}`);
           }
-
+        } catch (error) {
+          // This catch block handles any errors that occurred during invoice processing
+          console.error(`❌ [${invoice.referanse}] A critical error occurred:`, error.message);
+          
+          // Track failed invoice creation
+          invoiceResults.push({
+            referanse: invoice.referanse,
+            status: 'DRAFT',
+            error: `Critical error - ${error.message}`
+          });
+          
+          results.failed++;
+          results.errors.push(`${invoice.referanse}: Critical error - ${error.message}`);
+        }
       }
       
       // Small delay between invoices to avoid rate limiting
