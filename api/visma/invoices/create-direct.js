@@ -114,24 +114,6 @@ module.exports = async (req, res) => {
         });
       }
     } else {
-        console.log(`📍 No import_data available, creating placeholder invoices`);
-        // Create placeholder invoices - this is not ideal but will allow the process to continue
-        const invoiceCount = parseInt(processed_invoices.match(/\d+/)?.[0] || '0');
-        if (invoiceCount > 0) {
-          console.log(`📍 Creating ${invoiceCount} invoices with default data`);
-          for (let i = 0; i < invoiceCount; i++) {
-            importInvoices.push({
-              referanse: `REF-${Date.now()}-${i}`,
-              mottaker: `Customer ${i + 1}`,
-              avsender: 'Default Sender',
-              // Do NOT set amount - let preset system handle it
-              // Do NOT set unit_price - let preset system handle it
-              currency: 'NOK'
-            });
-          }
-        }
-      }
-    } else {
       console.log(`📍 No processed_invoices data available`);
       return res.status(400).json({ error: 'No invoice data available' });
     }
