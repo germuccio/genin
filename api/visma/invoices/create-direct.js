@@ -91,7 +91,7 @@ module.exports = async (req, res) => {
           referanse: invoice.our_reference || `REF-${Date.now()}-${index}`,
           mottaker: invoice.mottaker || `Customer ${index + 1}`,
           avsender: invoice.avsender || 'Default Sender',
-          amount: (() => { const excelAmount = invoice.amount || invoice.Valutabeløp || invoice.Valutabelop || invoice.Amount || 414; return typeof excelAmount === "number" ? excelAmount : parseFloat(excelAmount) || 414; })(), unit_price: (() => { const excelAmount = invoice.amount || invoice.Valutabeløp || invoice.Valutabelop || invoice.Amount || 414; return typeof excelAmount === "number" ? excelAmount : parseFloat(excelAmount) || 414; })(),
+          // Do NOT set amount or unit_price - let preset system handle it
           currency: invoice.currency || 'NOK',
           declaration_pdf: import_data.pdfs && import_data.pdfs[index] ? {
             filename: import_data.pdfs[index].filename,
@@ -112,8 +112,8 @@ module.exports = async (req, res) => {
               referanse: `REF-${Date.now()}-${i}`,
               mottaker: `Customer ${i + 1}`,
               avsender: 'Default Sender',
-              amount: 414, // Default amount
-              unit_price: 414, // Set both for compatibility
+              // Do NOT set amount - let preset system handle it
+              // Do NOT set unit_price - let preset system handle it
               currency: 'NOK'
             });
           }
@@ -325,7 +325,7 @@ module.exports = async (req, res) => {
               ArticleId: articleId,
               Description: `Transport service - ${invoice.referanse}`,
               Quantity: 1,
-              UnitPrice: (() => { const amount = invoice.unit_price || invoice.amount || 414; console.log(`[${invoice.referanse}] Amount calculation: unit_price=${invoice.unit_price}, amount=${invoice.amount}, final=${amount}`); return amount; })(),
+              UnitPrice: 414, // Use preset price from UI setup (like local deployment)
               VatRate: 25, // Standard Norwegian VAT
               LineNumber: 1,
               IsWorkCost: false,
