@@ -85,8 +85,8 @@ module.exports = async (req, res) => {
         });
         
       } else {
-        // Return all available imports by fetching from Visma
-        console.log('📋 Fetching all available imports from Visma');
+        // Return all available invoices from Visma
+        console.log('📋 Fetching all available invoices from Visma');
         
         try {
           // Fetch all draft invoices from Visma
@@ -122,10 +122,27 @@ module.exports = async (req, res) => {
           const availableImports = Object.values(importGroups);
           console.log(`📋 Found ${availableImports.length} import groups with ${drafts.length} total invoices`);
           
+          // Return both import metadata and all invoices
           return res.json({
             success: true,
             available_imports: availableImports,
             total_invoices: drafts.length,
+            // Also return all invoices for the frontend to display
+            invoices: drafts.map(draft => ({
+              id: draft.Id,
+              referanse: draft.OurReference || draft.YourReference || `REF-${draft.Id}`,
+              your_reference: draft.YourReference,
+              mottaker: draft.CustomerName || 'Unknown',
+              avsender: 'Genin',
+              status: 'draft',
+              total_cents: Math.round((draft.Amount || 0) * 100),
+              unit_price: draft.Amount || 0,
+              currency: draft.CurrencyCode || 'NOK',
+              created_at: draft.CreatedDateTime || new Date().toISOString(),
+              visma_invoice_id: draft.Id,
+              filename: `Import ${draft.OurReference || 'Unknown'}`,
+              import_id: draft.OurReference || 'unknown'
+            })),
             note: availableImports.length === 0 ? 'No imports found. Upload an Excel file first.' : undefined
           });
           
