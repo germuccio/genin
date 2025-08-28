@@ -307,7 +307,13 @@ const customersNeedingInfo = computed(() => {
 
 // Computed properties for continue processing
 const hasIncompleteProcessing = computed(() => {
-  return processingInfo.value?.has_remaining === true
+  const result = processingInfo.value?.has_remaining === true
+  console.log('🔍 DEBUG: hasIncompleteProcessing computed:', {
+    processingInfo: processingInfo.value,
+    has_remaining: processingInfo.value?.has_remaining,
+    result: result
+  })
+  return result
 })
 
 const remainingInvoicesCount = computed(() => {
@@ -440,6 +446,10 @@ const createInvoicesInVisma = async () => {
       // Store processing info for continue functionality
       if (response.data.processing_info) {
         processingInfo.value = response.data.processing_info
+        console.log('🔍 DEBUG: Set processingInfo.value:', processingInfo.value)
+        console.log('🔍 DEBUG: hasIncompleteProcessing computed:', hasIncompleteProcessing.value)
+      } else {
+        console.log('🔍 DEBUG: No processing_info in response:', response.data)
       }
       
       const remainingCount = response.data.summary?.remaining || 0
