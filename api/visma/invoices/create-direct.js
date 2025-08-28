@@ -201,15 +201,22 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'Could not determine Terms of Payment from Visma. Cannot create invoices.' });
     }
 
-    // Process ALL invoices without timeout limitations
-    console.log(`📍 Starting to process ALL ${importInvoices.length} invoices...`);
+    // Process invoices in manageable chunks to avoid timeout
+    console.log(`📍 Starting to process ${importInvoices.length} invoices...`);
     
     // Track results for each invoice
     const invoiceResults = [];
     const invoiceAttachments = {};
     
-    // Process invoices sequentially to ensure all are processed
-    for (let i = 0; i < importInvoices.length; i++) {
+    // Get processing parameters from request (for resume functionality)
+    const startIndex = parseInt(req.body.start_index) || 0;
+    const chunkSize = 20; // Process 20 invoices per request
+    const endIndex = Math.min(startIndex + chunkSize, importInvoices.length);
+    
+    console.log(`📍 Processing chunk: invoices ${startIndex + 1}-${endIndex} of ${importInvoices.length}`);
+    
+    // Process only the current chunk
+    for (let i = startIndex; i < endIndex; i++) {
       const invoice = importInvoices[i];
       console.log(`📍 Processing invoice ${i + 1}/${importInvoices.length}: ${invoice.referanse}`);
       
@@ -491,18 +498,36 @@ module.exports = async (req, res) => {
 
     console.log(`📍 Invoice creation completed: ${results.successful} successful, ${results.failed} failed`);
     
+    // Calculate remaining invoices
+    const totalInvoices = importInvoices.length;
+    const processedInvoices = endIndex;
+    const remainingInvoices = totalInvoices - processedInvoices;
+    
     res.json({ 
       success: true,
       summary: {
         successful: results.successful,
-        failed: results.failed
+        failed: results.failed,
+        total: totalInvoices,
+        processed: processedInvoices,
+        remaining: remainingInvoices
       },
-      message: `Created ${results.successful} invoices in Visma. ${results.failed} failed.`,
-      errors: results.errors.slice(0, 10), // Limit errors to avoid response size issues
-      invoices_processed: importInvoices.length,
-      invoice_results: invoiceResults, // Detailed status for each invoice
+      message: `Created ${results.successful} invoices in Visma. ${results.failed} failed. ${remainingInvoices} remaining.`,
+      errors: results.errors.slice(0, 10),
+      invoices_processed: processedInvoices,
+      invoice_results: invoiceResults,
       invoice_attachments: invoiceAttachments,
-      note: 'All invoices processed with status tracking. Check invoice_results for individual status.'
+      // Information for resuming processing
+      processing_info: {
+        start_index: startIndex,
+        end_index: endIndex,
+        chunk_size: chunkSize,
+        next_start_index: remainingInvoices > 0 ? endIndex : null,
+        has_remaining: remainingInvoices > 0
+      },
+      note: remainingInvoices > 0 
+        ? `Processed ${processedInvoices}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
+        : 'All invoices processed with status tracking.'
     });
   } catch (error) {
     console.error('📍 Create direct invoices error:', error);

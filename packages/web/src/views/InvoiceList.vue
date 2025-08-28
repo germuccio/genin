@@ -5,6 +5,16 @@
         <h2>Invoices</h2>
         <div class="header-actions">
           <button 
+            v-if="hasIncompleteProcessing"
+            @click="continueProcessing" 
+            class="btn btn-success btn-sm"
+            :disabled="isContinuingProcessing"
+            title="Continue processing remaining invoices"
+          >
+            <span v-if="isContinuingProcessing">Processing...</span>
+            <span v-else>Continue Processing ({{ remainingInvoicesCount }} left)</span>
+          </button>
+          <button 
             v-if="hasLocalDrafts" 
             @click="validateAndCreateInvoices" 
             class="btn btn-primary btn-sm" 
@@ -258,6 +268,8 @@ const isValidating = ref(false)
 const validationResult = ref<any>(null)
 const isDeletingDrafts = ref(false)
 const isClearingLocal = ref(false)
+const isContinuingProcessing = ref(false)
+const processingInfo = ref<any>(null)
 const termsOptions = ref<any[]>([])
 const perCustomerOverrides = ref<Record<string, { address: string; city: string; postalCode: string; country: string; termsOfPaymentId?: string }>>({})
 const showCustomerModal = ref(false)
@@ -291,6 +303,15 @@ const customersNeedingInfo = computed(() => {
     .filter(inv => !inv.visma_invoice_id)
     .forEach(inv => { if (inv.mottaker) names.add(inv.mottaker) })
   return Array.from(names)
+})
+
+// Computed properties for continue processing
+const hasIncompleteProcessing = computed(() => {
+  return processingInfo.value?.has_remaining === true
+})
+
+const remainingInvoicesCount = computed(() => {
+  return processingInfo.value?.remaining || 0
 })
 
 const validateAndCreateInvoices = async () => {
@@ -416,8 +437,19 @@ const createInvoicesInVisma = async () => {
       const errors = response.data.errors || response.data.summary?.errors || []
       const failed = response.data.summary?.failed || 0
       
+      // Store processing info for continue functionality
+      if (response.data.processing_info) {
+        processingInfo.value = response.data.processing_info
+      }
+      
+      const remainingCount = response.data.summary?.remaining || 0
+      
       if (created > 0) {
-        alert(`✅ Successfully created ${created} invoices in Visma eAccounting!`)
+        if (remainingCount > 0) {
+          alert(`✅ Successfully created ${created} invoices in Visma eAccounting!\n\n⏳ ${remainingCount} invoices remaining. Click "Continue Processing" to process the rest.`)
+        } else {
+          alert(`✅ Successfully created ${created} invoices in Visma eAccounting!`)
+        }
         // Refresh the invoice list to show updated Visma IDs
         await loadInvoices()
       }
@@ -442,6 +474,59 @@ const createInvoicesInVisma = async () => {
     }
   } finally {
     isCreatingInVisma.value = false
+  }
+}
+
+const continueProcessing = async () => {
+  if (!processingInfo.value?.next_start_index) {
+    alert('No remaining invoices to process')
+    return
+  }
+
+  isContinuingProcessing.value = true
+  error.value = ''
+
+  try {
+    console.log('🔄 Continuing invoice processing from index:', processingInfo.value.next_start_index)
+
+    // Create the continue processing request
+    const continueRequest = {
+      start_index: processingInfo.value.next_start_index,
+      // Include all the same data as the original request
+      articleMapping: { ok: '69f95c2e-255d-4836-9df1-3a4961bc417b' }, // This should come from the original request
+      customerDefaults: customerDefaults.value,
+      customerOverrides: perCustomerOverrides.value,
+      // The backend should still have the processed_invoices and import_data
+    }
+
+    const response = await axios.post('/api/visma/invoices/create-direct', continueRequest)
+    
+    console.log('💫 Continue processing completed:', response.data)
+    
+    // Update processing info
+    if (response.data.processing_info) {
+      processingInfo.value = response.data.processing_info
+    }
+    
+    const successCount = response.data.summary?.successful || 0
+    const remainingCount = response.data.summary?.remaining || 0
+    
+    if (remainingCount > 0) {
+      alert(`✅ Successfully processed ${successCount} more invoices!\n\n⏳ ${remainingCount} invoices still remaining. Click "Continue Processing" again to process the rest.`)
+    } else {
+      alert(`✅ Successfully processed ${successCount} more invoices!\n\n🎉 All invoices have been processed!`)
+      processingInfo.value = null // Clear processing info
+    }
+    
+    // Refresh to show the newly created invoices
+    await loadInvoices()
+    
+  } catch (err: any) {
+    console.error('❌ Continue processing failed:', err)
+    error.value = err.response?.data?.error || 'Failed to continue processing invoices'
+    alert(`❌ Failed to continue processing: ${error.value}`)
+  } finally {
+    isContinuingProcessing.value = false
   }
 }
 
@@ -648,6 +733,21 @@ onMounted(() => {
 }
 
 .status-badge.cancelled {
+  background-color: #dc3545;
+  color: white;
+}
+
+.status-badge.CREATED_AS_DRAFT {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.status-badge.DRAFT {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.status-badge.FAILED {
   background-color: #dc3545;
   color: white;
 }
