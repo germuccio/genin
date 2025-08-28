@@ -467,13 +467,31 @@ const createInvoicesInVisma = async () => {
     }
   } catch (err: any) {
     console.error('Failed to create invoices in Visma:', err)
+    
+    // Still try to extract processing info even on error
+    if (err.response?.data?.processing_info) {
+      processingInfo.value = err.response.data.processing_info
+    }
+    
     if (err.response?.status === 401) {
       error.value = 'Not authenticated with Visma. Please go to Setup and connect first.'
     } else {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to create invoices in Visma'
       error.value = errorMessage
-      alert(`❌ Failed to create invoices: ${errorMessage}`)
+      
+      // Show different messages based on whether some invoices were processed
+      const partialSuccess = err.response?.data?.summary?.successful > 0
+      if (partialSuccess) {
+        const successful = err.response.data.summary.successful
+        const remaining = err.response.data.summary.remaining || 0
+        alert(`⚠️ Partially completed: ${successful} invoices created successfully.\n${remaining > 0 ? `${remaining} invoices remaining. Use "Continue Processing" to process the rest.\n` : ''}Error: ${errorMessage}`)
+      } else {
+        alert(`❌ Failed to create invoices: ${errorMessage}`)
+      }
     }
+    
+    // Refresh to show any invoices that were created
+    await loadInvoices()
   } finally {
     isCreatingInVisma.value = false
   }

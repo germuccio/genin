@@ -564,10 +564,33 @@ module.exports = async (req, res) => {
       errorMessage = 'Connection lost during processing. Some invoices may have been created. Please refresh and check the invoice list.';
     }
     
+    // Try to provide processing info even on error if we have partial results
+    let partialProcessingInfo = null;
+    if (typeof results !== 'undefined' && results.successful > 0) {
+      const totalInvoices = importInvoices?.length || 0;
+      const processedInvoices = startIndex + results.successful + results.failed;
+      const remainingInvoices = totalInvoices - processedInvoices;
+      
+      partialProcessingInfo = {
+        import_id: import_id,
+        start_index: startIndex,
+        end_index: processedInvoices,
+        chunk_size: chunkSize,
+        next_start_index: remainingInvoices > 0 ? processedInvoices : null,
+        has_remaining: remainingInvoices > 0
+      };
+    }
+    
     res.status(500).json({ 
       error: errorMessage, 
       details: error.message,
-      technical_error: error.stack
+      technical_error: error.stack,
+      summary: typeof results !== 'undefined' ? {
+        successful: results.successful || 0,
+        failed: results.failed || 0,
+        remaining: partialProcessingInfo ? (importInvoices?.length || 0) - (startIndex + results.successful + results.failed) : 0
+      } : undefined,
+      processing_info: partialProcessingInfo
     });
   }
 };
