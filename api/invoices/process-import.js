@@ -111,7 +111,7 @@ module.exports = async (req, res) => {
       our_reference: processedInvoices[0].referanse // This should match the Excel Referanse column
     } : 'No invoices');
     
-    res.json({ 
+    const responseData = {
       success: true,
       processed: processed,
       import_id: parseInt(import_id),
@@ -119,7 +119,21 @@ module.exports = async (req, res) => {
       message: `Processed ${processed} invoices from import ${import_id}`,
       // Return processed invoices for Vercel stateless environment
       processed_invoices: processedInvoices
+    };
+    
+    console.log('📍 Sending response to frontend:', {
+      success: responseData.success,
+      processed: responseData.processed,
+      import_id: responseData.import_id,
+      processed_invoices_count: responseData.processed_invoices.length,
+      processed_invoices_sample: responseData.processed_invoices[0] ? {
+        referanse: responseData.processed_invoices[0].referanse,
+        mottaker: responseData.processed_invoices[0].mottaker,
+        our_reference: responseData.processed_invoices[0].referanse
+      } : 'No invoices'
     });
+    
+    res.json(responseData);
   } catch (error) {
     console.error('📍 Process import error:', error);
     res.status(500).json({ 
