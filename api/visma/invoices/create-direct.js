@@ -201,30 +201,19 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'Could not determine Terms of Payment from Visma. Cannot create invoices.' });
     }
 
-    // Process invoices in batches to avoid timeout
-    console.log(`📍 Starting to process ${importInvoices.length} invoices in batches...`);
-    // Reduce batch size for Vercel timeout constraints (10 seconds max)
-    const batchSize = 3;
+    // Process ALL invoices without timeout limitations
+    console.log(`📍 Starting to process ALL ${importInvoices.length} invoices...`);
     
-    // Track processing time to avoid Vercel timeout
-    const startTime = Date.now();
-    const maxProcessingTime = 9500; // 9.5 seconds to leave 0.5s buffer for response
-    
-    // Track PDF attachments for later processing
+    // Track results for each invoice
+    const invoiceResults = [];
     const invoiceAttachments = {};
     
-    for (let i = 0; i < importInvoices.length; i += batchSize) {
-      // Check if we're approaching timeout
-      const elapsedTime = Date.now() - startTime;
-      if (elapsedTime > maxProcessingTime) {
-        console.log(`⏰ Approaching timeout (${elapsedTime}ms), stopping processing at batch ${Math.floor(i/batchSize) + 1}`);
-        break;
-      }
+    // Process invoices sequentially to ensure all are processed
+    for (let i = 0; i < importInvoices.length; i++) {
+      const invoice = importInvoices[i];
+      console.log(`📍 Processing invoice ${i + 1}/${importInvoices.length}: ${invoice.referanse}`);
       
-      const batch = importInvoices.slice(i, i + batchSize);
-      console.log(`📍 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(importInvoices.length/batchSize)}`);
-      
-      for (const invoice of batch) {
+      try {
         try {
           console.log(`📍 Processing invoice: ${invoice.referanse}`);
           
@@ -369,18 +358,21 @@ module.exports = async (req, res) => {
               }
             });
 
-            console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id}) - ${results.successful + 1}/${importInvoices.length} completed`);
+                        console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id}) - ${results.successful + 1}/${importInvoices.length} completed`);
             
-            // Try to attach PDF if available (same logic as working locally)
+            // Track successful invoice creation
+            invoiceResults.push({
+              referanse: invoice.referanse,
+              status: 'CREATED_AS_DRAFT',
+              visma_id: invoiceResp.data.Id,
+              pdf_attached: false
+            });
+            
+            // Try to attach PDF if available
             if (invoice.declaration_pdf || invoice.pdf_data) {
-              // Check timeout before PDF attachment (PDF attachment takes extra time)
-              const currentElapsedTime = Date.now() - startTime;
-              if (currentElapsedTime > maxProcessingTime - 1000) { // Leave 1 second buffer
-                console.log(`⏰ Skipping PDF attachment due to timeout risk (${currentElapsedTime}ms)`);
-              } else {
-                try {
-                  console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
-                
+              try {
+                console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
+              
                 // Get PDF data from import_data if available
                 let pdfToAttach = null;
                 if (import_data && import_data.pdfs && Array.isArray(import_data.pdfs)) {
@@ -394,7 +386,7 @@ module.exports = async (req, res) => {
                 if (pdfToAttach && pdfToAttach.content) {
                   console.log(`[${invoice.referanse}] Found PDF to attach: ${pdfToAttach.filename}`);
                   
-                  // Attach PDF to Visma invoice using their attachments API (same as local)
+                  // Attach PDF to Visma invoice using their attachments API
                   const attachmentData = {
                     DockumentId: invoiceResp.data.Id, // Note: Visma uses "DockumentId" not "DocumentId"
                     DocumentType: 'CustomerInvoiceDraft',
@@ -427,24 +419,29 @@ module.exports = async (req, res) => {
                     attachmentId: attachmentResp.data.Id
                   });
                   
+                  // Update invoice result to show PDF was attached
+                  const resultIndex = invoiceResults.findIndex(r => r.referanse === invoice.referanse);
+                  if (resultIndex !== -1) {
+                    invoiceResults[resultIndex].pdf_attached = true;
+                  }
+                  
                 } else {
                   console.log(`[${invoice.referanse}] No PDF content available for attachment`);
                 }
+              
+              } catch (pdfError) {
+                console.error(`❌ PDF attachment failed for invoice ${invoiceResp.data.Id}:`, pdfError.response?.data || pdfError.message);
                 
-                } catch (pdfError) {
-                  console.error(`❌ PDF attachment failed for invoice ${invoiceResp.data.Id}:`, pdfError.response?.data || pdfError.message);
-                  
-                  // Track failed attachment
-                  if (!invoiceAttachments[invoiceResp.data.Id]) {
-                    invoiceAttachments[invoiceResp.data.Id] = [];
-                  }
-                  invoiceAttachments[invoiceResp.data.Id].push({
-                    filename: invoice.declaration_pdf?.filename || 'unknown.pdf',
-                    status: 'failed',
-                    error: pdfError.response?.data || pdfError.message
-                  });
+                // Track failed attachment
+                if (!invoiceAttachments[invoiceResp.data.Id]) {
+                  invoiceAttachments[invoiceResp.data.Id] = [];
                 }
-              } // Close the else block for timeout check
+                invoiceAttachments[invoiceResp.data.Id].push({
+                  filename: invoice.declaration_pdf?.filename || 'unknown.pdf',
+                  status: 'failed',
+                  error: pdfError.response?.data || pdfError.message
+                });
+              }
             }
             
             results.successful++;
@@ -461,20 +458,35 @@ module.exports = async (req, res) => {
               console.error(`[${invoice.referanse}] Error setting up request:`, error.message);
             }
             
+            // Track failed invoice creation
+            invoiceResults.push({
+              referanse: invoice.referanse,
+              status: 'DRAFT',
+              error: error.response?.data?.DeveloperErrorMessage || error.message
+            });
+            
             results.failed++;
             results.errors.push(`${invoice.referanse}: ${error.response?.data?.DeveloperErrorMessage || error.message}`);
           }
         } catch (error) {
             // This outer catch is for logic errors before the API call
             console.error(`❌ [${invoice.referanse}] A critical logic error occurred:`, error.message);
+            
+            // Track failed invoice creation
+            invoiceResults.push({
+              referanse: invoice.referanse,
+              status: 'DRAFT',
+              error: `Logic error - ${error.message}`
+            });
+            
             results.failed++;
             results.errors.push(`${invoice.referanse}: Logic error - ${error.message}`);
         }
       }
       
-      // Small delay between batches to avoid rate limiting
-      if (i + batchSize < importInvoices.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      // Small delay between invoices to avoid rate limiting
+      if (i < importInvoices.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -489,8 +501,9 @@ module.exports = async (req, res) => {
       message: `Created ${results.successful} invoices in Visma. ${results.failed} failed.`,
       errors: results.errors.slice(0, 10), // Limit errors to avoid response size issues
       invoices_processed: importInvoices.length,
+      invoice_results: invoiceResults, // Detailed status for each invoice
       invoice_attachments: invoiceAttachments,
-      note: 'PDF attachments need to be handled separately using the /api/visma/invoices/attach-pdf endpoint'
+      note: 'All invoices processed with status tracking. Check invoice_results for individual status.'
     });
   } catch (error) {
     console.error('📍 Create direct invoices error:', error);
