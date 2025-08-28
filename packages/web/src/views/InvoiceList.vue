@@ -492,11 +492,12 @@ const continueProcessing = async () => {
     // Create the continue processing request
     const continueRequest = {
       start_index: processingInfo.value.next_start_index,
+      import_id: processingInfo.value.import_id || Date.now().toString(), // Use stored import_id
       // Include all the same data as the original request
       articleMapping: { ok: '69f95c2e-255d-4836-9df1-3a4961bc417b' }, // This should come from the original request
       customerDefaults: customerDefaults.value,
       customerOverrides: perCustomerOverrides.value,
-      // The backend should still have the processed_invoices and import_data
+      // The backend should still have the processed_invoices and import_data stored globally
     }
 
     const response = await axios.post('/api/visma/invoices/create-direct', continueRequest)

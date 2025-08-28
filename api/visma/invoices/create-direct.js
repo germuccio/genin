@@ -519,6 +519,7 @@ module.exports = async (req, res) => {
       invoice_attachments: invoiceAttachments,
       // Information for resuming processing
       processing_info: {
+        import_id: import_id,
         start_index: startIndex,
         end_index: endIndex,
         chunk_size: chunkSize,
