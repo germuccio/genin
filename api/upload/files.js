@@ -7,7 +7,7 @@ function setCors(res) {
 }
 const formidable = require('formidable'); // Use standard require for formidable v3
 const XLSX = require('xlsx');
-const fs = require('fs');
+
 
 // Simple in-memory storage for processed data (resets on serverless cold start)
 global.processedImports = global.processedImports || {};
@@ -119,20 +119,17 @@ module.exports = async (req, res) => {
       
       pdfArray.forEach((pdfFile, index) => {
         try {
-          // Read the PDF file content and encode as base64
-          const pdfBuffer = fs.readFileSync(pdfFile.filepath);
-          const pdfBase64 = pdfBuffer.toString('base64');
-          
-          // Store PDF info with content for Visma attachment
+          // Store PDF metadata only (not the full content) to avoid request size issues
           processedPdfs.push({
             filename: pdfFile.originalFilename,
             size: pdfFile.size,
             mimetype: pdfFile.mimetype,
             index: index,
-            content: pdfBase64, // Base64 encoded PDF content for Visma attachment
-            // Note: In Vercel, we can't store files permanently, but we can send content directly to Visma
+            // Note: In Vercel, we can't store the actual PDF content permanently
+            // The frontend will need to handle PDF storage or the create-direct endpoint will need to process them
+            // For now, we'll just store metadata and handle PDF attachment separately
           });
-          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (${pdfFile.size} bytes, base64 encoded)`);
+          console.log(`✅ Processed PDF: ${pdfFile.originalFilename}`);
         } catch (error) {
           console.error(`❌ Error processing PDF ${pdfFile.originalFilename}:`, error);
         }

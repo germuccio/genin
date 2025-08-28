@@ -370,36 +370,30 @@ module.exports = async (req, res) => {
                   }
                 }
                 
-                if (pdfToAttach && pdfToAttach.content) {
-                  // Attach PDF to Visma using their API
-                  const attachmentData = {
-                    DocumentId: invoiceResp.data.Id,
-                    DocumentType: 'CustomerInvoiceDraft',
-                    FileName: pdfToAttach.filename || `declaration_${invoice.referanse}.pdf`,
-                    FileContent: pdfToAttach.content, // Base64 encoded PDF content
-                    ContentType: pdfToAttach.mimetype || 'application/pdf'
-                  };
+                if (pdfToAttach) {
+                  console.log(`[${invoice.referanse}] Found PDF metadata: ${pdfToAttach.filename} (${pdfToAttach.size} bytes)`);
                   
-                  try {
-                    const attachmentResp = await axios.post(`${apiBaseUrl}/v2/salesdocumentattachments/customerinvoicedraft`, attachmentData, {
-                      headers: {
-                        'Authorization': `Bearer ${tokens.access_token}`,
-                        'Content-Type': 'application/json'
-                      }
-                    });
-                    
-                    console.log(`✅ PDF attachment successful for invoice ${invoice.referanse}: ${pdfToAttach.filename}`);
-                  } catch (attachmentError) {
-                    console.warn(`⚠️ PDF attachment failed for invoice ${invoice.referanse}:`, attachmentError.response?.data || attachmentError.message);
-                  }
+                  // Since we can't store PDF content in Vercel, we'll create a placeholder attachment
+                  // In a production environment, you would need to:
+                  // 1. Store PDFs in a cloud storage service (S3, Azure Blob, etc.)
+                  // 2. Or implement a separate PDF upload endpoint that handles the actual file content
+                  // 3. Or use Visma's file upload capabilities if they support direct file uploads
+                  
+                  console.log(`[${invoice.referanse}] ⚠️ PDF attachment skipped - Vercel environment limitation`);
+                  console.log(`[${invoice.referanse}] PDF metadata available: ${pdfToAttach.filename} (${pdfToAttach.size} bytes)`);
+                  
+                  // TODO: Implement actual PDF attachment when cloud storage is available
+                  // For now, we'll just log that the PDF should be attached
+                  
                 } else {
-                  console.log(`[${invoice.referanse}] PDF info: ${invoice.declaration_pdf?.filename || 'unknown'} (${invoice.declaration_pdf?.size || 0} bytes)`);
-                  console.log(`[${invoice.referanse}] Note: PDF content not available for attachment`);
+                  console.log(`[${invoice.referanse}] No PDF metadata found for attachment`);
                 }
                 
-              } catch (pdfError) {
-                console.warn(`[${invoice.referanse}] PDF attachment info logging failed:`, pdfError.message);
+              } catch (error) {
+                console.warn(`⚠️ PDF attachment failed for invoice ${invoice.referanse}:`, error);
               }
+            } else {
+              console.log(`[${invoice.referanse}] No PDF data available for attachment`);
             }
             
             results.successful++;
