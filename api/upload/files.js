@@ -138,7 +138,7 @@ module.exports = async (req, res) => {
           // Generate a unique ID for this PDF that can be referenced later
           const pdfId = `pdf_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
           
-          // Read the PDF file content and store it for attachment (same as local)
+          // Read the PDF file content and store it temporarily for immediate attachment
           let pdfContent = null;
           try {
             if (pdfFile.filepath) {
@@ -146,21 +146,23 @@ module.exports = async (req, res) => {
             } else if (pdfFile.buffer) {
               pdfContent = pdfFile.buffer;
             }
-          } catch (readError) {
-            console.warn(`⚠️ Could not read PDF content for ${pdfFile.originalFilename}:`, readError.message);
+          } catch (err) {
+            console.warn(`⚠️ Could not read PDF content for ${pdfFile.originalFilename}:`, err.message);
           }
           
-          // Store PDF metadata with content for Visma attachment (same as local)
-          processedPdfs.push({
+          // Store PDF metadata with a unique ID for later reference
+          const pdfData = {
             id: pdfId,
             filename: pdfFile.originalFilename,
             size: pdfFile.size,
             mimetype: pdfFile.mimetype,
             index: index,
-            // Store the actual file content for immediate attachment (same as local)
-            content: pdfContent
-          });
-          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (ID: ${pdfId}, Size: ${pdfContent ? pdfContent.length : 0} bytes)`);
+            // Store the actual PDF content for immediate attachment (this will be used in the same request)
+            content: pdfContent ? pdfContent.toString('base64') : null
+          };
+          
+          processedPdfs.push(pdfData);
+          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (${pdfFile.size} bytes)`);
         } catch (error) {
           console.error(`❌ Error processing PDF ${pdfFile.originalFilename}:`, error);
         }

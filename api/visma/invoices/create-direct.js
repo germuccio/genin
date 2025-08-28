@@ -384,7 +384,7 @@ module.exports = async (req, res) => {
                     FileName: pdfToAttach.filename,
                     FileSize: pdfToAttach.size,
                     ContentType: pdfToAttach.mimetype,
-                    Data: pdfToAttach.content.toString('base64')
+                    Data: pdfToAttach.content // Content is already base64 encoded from upload
                   };
                   
                   const attachmentResponse = await axios.post(
@@ -399,7 +399,7 @@ module.exports = async (req, res) => {
                   );
                   
                   if (attachmentResponse.status === 200 || attachmentResponse.status === 201) {
-                    console.log(`✅ PDF attached successfully to invoice ${invoiceResp.data.Id}`);
+                    console.log(`✅ PDF attachment successful for invoice ${invoiceResp.data.Id}`);
                     // Track successful attachment
                     if (!invoiceAttachments[invoiceResp.data.Id]) {
                       invoiceAttachments[invoiceResp.data.Id] = [];
