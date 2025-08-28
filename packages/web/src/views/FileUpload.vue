@@ -378,8 +378,12 @@ const generateInvoicesDirect = async () => {
       try { localStorage.setItem('processingInfo', JSON.stringify(directResp.data.processing_info)) } catch {}
     }
     
-    // Show success message
-    alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
+    // Show success message only when all are completed; avoid blocking alert mid-run
+    if (remaining === 0) {
+      alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
+    } else {
+      console.info(`✅ Created ${directResp.data.summary.successful}. ${directResp.data.summary.failed} failed. ${remaining} remaining… auto-continuing on Invoices page.`)
+    }
     
     // Clear the upload result state in memory; keep persisted data until completion
     uploadResult.value = null
