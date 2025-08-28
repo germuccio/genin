@@ -214,8 +214,7 @@ module.exports = async (req, res) => {
       console.log(`📍 Processing invoice ${i + 1}/${importInvoices.length}: ${invoice.referanse}`);
       
       try {
-        try {
-          console.log(`📍 Processing invoice: ${invoice.referanse}`);
+        console.log(`📍 Processing invoice: ${invoice.referanse}`);
           
           // Create customer if needed
           let customerId = null;
@@ -468,20 +467,7 @@ module.exports = async (req, res) => {
             results.failed++;
             results.errors.push(`${invoice.referanse}: ${error.response?.data?.DeveloperErrorMessage || error.message}`);
           }
-        } catch (error) {
-            // This outer catch is for logic errors before the API call
-            console.error(`❌ [${invoice.referanse}] A critical logic error occurred:`, error.message);
-            
-            // Track failed invoice creation
-            invoiceResults.push({
-              referanse: invoice.referanse,
-              status: 'DRAFT',
-              error: `Logic error - ${error.message}`
-            });
-            
-            results.failed++;
-            results.errors.push(`${invoice.referanse}: Logic error - ${error.message}`);
-        }
+
       }
       
       // Small delay between invoices to avoid rate limiting
