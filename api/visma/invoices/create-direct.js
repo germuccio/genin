@@ -297,6 +297,28 @@ module.exports = async (req, res) => {
             });
 
             console.log(`✅ Created invoice: ${invoice.referanse} (Visma ID: ${invoiceResp.data.Id})`);
+            
+            // Try to attach PDF if available
+            if (invoice.declaration_pdf || invoice.pdf_data) {
+              try {
+                console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
+                
+                // For now, log PDF attachment info since we can't store files permanently in Vercel
+                if (invoice.declaration_pdf) {
+                  console.log(`[${invoice.referanse}] PDF info: ${invoice.declaration_pdf.filename} (${invoice.declaration_pdf.size} bytes)`);
+                  console.log(`[${invoice.referanse}] Note: PDF attachment requires file storage (not available in Vercel serverless)`);
+                }
+                
+                if (invoice.pdf_data) {
+                  console.log(`[${invoice.referanse}] PDF data available: ${invoice.pdf_data.filename || 'unnamed'}`);
+                  console.log(`[${invoice.referanse}] Note: PDF attachment requires file storage (not available in Vercel serverless)`);
+                }
+                
+              } catch (pdfError) {
+                console.warn(`[${invoice.referanse}] PDF attachment info logging failed:`, pdfError.message);
+              }
+            }
+            
             results.successful++;
 
           } catch (error) {
