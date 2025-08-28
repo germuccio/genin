@@ -167,6 +167,15 @@ module.exports = async (req, res) => {
           let customerId = null;
           const customerName = invoice.mottaker || 'Unknown Customer';
           
+          // DEBUG: Log the invoice data to see what we're working with
+          console.log(`[${invoice.referanse}] DEBUG - Invoice data:`, {
+            referanse: invoice.referanse,
+            mottaker: invoice.mottaker,
+            avsender: invoice.avsender,
+            your_reference: invoice.your_reference,
+            our_reference: invoice.our_reference
+          });
+          
           // Try to find existing customer first
           console.log(`[${invoice.referanse}] Searching for customer "${customerName}"...`);
           try {
@@ -186,6 +195,13 @@ module.exports = async (req, res) => {
             } else {
                console.log(`[${invoice.referanse}] Customer not found, will create.`);
             }
+            
+            // DEBUG: Log the full customer search response
+            console.log(`[${invoice.referanse}] DEBUG - Customer search response:`, {
+              status: customerSearchResp.status,
+              data: customerSearchResp.data,
+              searchParams: { name: customerName }
+            });
           } catch (searchErr) {
             console.error(`[${invoice.referanse}] Customer search failed:`, searchErr.response?.data || searchErr.message);
           }
