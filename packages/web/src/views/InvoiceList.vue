@@ -471,9 +471,15 @@ const createInvoicesInVisma = async () => {
       
       if (created > 0) {
         if (remainingCount > 0) {
-          alert(`✅ Successfully created ${created} invoices in Visma eAccounting!\n\n⏳ ${remainingCount} invoices remaining. Click "Continue Processing" to process the rest.`)
+          if (!isAutoContinuing) {
+            alert(`✅ Successfully created ${created} invoices in Visma eAccounting!\n\n⏳ ${remainingCount} invoices remaining. Processing will continue automatically...`)
+          } else {
+            console.info(`✅ Created ${created}. ${remainingCount} remaining; auto-continue running...`)
+          }
         } else {
-          alert(`✅ Successfully created ${created} invoices in Visma eAccounting!`)
+          if (!isAutoContinuing) {
+            alert(`✅ Successfully created ${created} invoices in Visma eAccounting!`)
+          }
           try { localStorage.removeItem('processingInfo') } catch {}
         }
         // Refresh the invoice list to show updated Visma IDs
@@ -588,9 +594,17 @@ const continueProcessing = async () => {
     const remainingCount = response.data.summary?.remaining || 0
     
     if (remainingCount > 0) {
-      alert(`✅ Successfully processed ${successCount} more invoices!\n\n⏳ ${remainingCount} invoices still remaining. Processing will continue automatically...`)
+      if (!isAutoContinuing) {
+        alert(`✅ Successfully processed ${successCount} more invoices!\n\n⏳ ${remainingCount} invoices still remaining. Processing will continue automatically...`)
+      } else {
+        console.info(`✅ Processed ${successCount} more. ${remainingCount} remaining...`)
+      }
     } else {
-      alert(`✅ Successfully processed ${successCount} more invoices!\n\n🎉 All invoices have been processed!`)
+      if (!isAutoContinuing) {
+        alert(`✅ Successfully processed ${successCount} more invoices!\n\n🎉 All invoices have been processed!`)
+      } else {
+        console.info(`🎉 Completed. Processed ${successCount} in final batch.`)
+      }
       processingInfo.value = null // Clear processing info
       try { localStorage.removeItem('processingInfo') } catch {}
       try { localStorage.removeItem('lastUploadResult') } catch {}
