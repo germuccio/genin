@@ -470,7 +470,9 @@ const createInvoicesInVisma = async () => {
     if (err.response?.status === 401) {
       error.value = 'Not authenticated with Visma. Please go to Setup and connect first.'
     } else {
-      error.value = err.response?.data?.error || 'Failed to create invoices in Visma'
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to create invoices in Visma'
+      error.value = errorMessage
+      alert(`❌ Failed to create invoices: ${errorMessage}`)
     }
   } finally {
     isCreatingInVisma.value = false
@@ -524,8 +526,9 @@ const continueProcessing = async () => {
     
   } catch (err: any) {
     console.error('❌ Continue processing failed:', err)
-    error.value = err.response?.data?.error || 'Failed to continue processing invoices'
-    alert(`❌ Failed to continue processing: ${error.value}`)
+    const errorMessage = err.response?.data?.error || err.message || 'Failed to continue processing invoices'
+    error.value = errorMessage
+    alert(`❌ Failed to continue processing: ${errorMessage}`)
   } finally {
     isContinuingProcessing.value = false
   }

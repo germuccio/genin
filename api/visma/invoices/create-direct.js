@@ -84,8 +84,30 @@ module.exports = async (req, res) => {
       console.log(`⚠️ WARNING: processed_invoices is a string: "${processed_invoices}"`);
       console.log(`📍 This indicates a frontend data transformation issue`);
       
+        // Try to get data from global storage first
+      if (global.processedImports && global.processedImports[import_id]) {
+        const storedData = global.processedImports[import_id];
+        console.log(`📍 Found stored data for import_id: ${import_id} with ${storedData.invoices.length} invoices`);
+        
+        importInvoices = storedData.invoices.map((invoice, index) => ({
+          referanse: invoice.our_reference || invoice.referanse || `REF-${Date.now()}-${index}`,
+          mottaker: invoice.mottaker || `Customer ${index + 1}`,
+          avsender: invoice.avsender || 'Default Sender',
+          currency: invoice.currency || 'NOK',
+          declaration_pdf: storedData.pdfs && storedData.pdfs[index] ? {
+            filename: storedData.pdfs[index].filename,
+            size: storedData.pdfs[index].size,
+            mimetype: storedData.pdfs[index].mimetype,
+            index: storedData.pdfs[index].index
+          } : null
+        }));
+        console.log(`📍 Successfully reconstructed ${importInvoices.length} invoices from stored data`);
+        
+        // Store the import_data for PDF attachment
+        import_data = storedData;
+      }
       // Try to reconstruct invoices from import_data if available
-      if (import_data && import_data.invoices && Array.isArray(import_data.invoices)) {
+      else if (import_data && import_data.invoices && Array.isArray(import_data.invoices)) {
         console.log(`📍 Reconstructing invoices from import_data with ${import_data.invoices.length} invoices`);
         importInvoices = import_data.invoices.map((invoice, index) => ({
           referanse: invoice.our_reference || `REF-${Date.now()}-${index}`,
@@ -530,13 +552,22 @@ module.exports = async (req, res) => {
         ? `Processed ${processedInvoices}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
         : 'All invoices processed with status tracking.'
     });
-  } catch (error) {
+    } catch (error) {
     console.error('📍 Create direct invoices error:', error);
     console.error('📍 Error stack:', error.stack);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to create invoices in Visma';
+    if (error.message.includes('timeout')) {
+      errorMessage = 'Request timed out. Some invoices may have been created. Please check the invoice list and use "Continue Processing" if needed.';
+    } else if (error.message.includes('ECONNRESET') || error.message.includes('socket')) {
+      errorMessage = 'Connection lost during processing. Some invoices may have been created. Please refresh and check the invoice list.';
+    }
+    
     res.status(500).json({ 
-      error: 'Failed to create invoices in Visma', 
+      error: errorMessage, 
       details: error.message,
-      stack: error.stack 
+      technical_error: error.stack
     });
   }
 };
