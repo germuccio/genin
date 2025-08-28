@@ -62,11 +62,17 @@ module.exports = async (req, res) => {
     // Convert to JSON
     const jsonData = XLSX.utils.sheet_to_json(worksheet);
     console.log(`📊 Parsed ${jsonData.length} rows from Excel`);
+    
+    // DEBUG: Log the first row to see what columns are available
+    if (jsonData.length > 0) {
+      console.log('📊 DEBUG - First row columns:', Object.keys(jsonData[0]));
+      console.log('📊 DEBUG - First row data:', jsonData[0]);
+    }
 
     // Process the data (simplified version of your local processing)
     const processedInvoices = jsonData.map((row, index) => {
-      // Convert row data to match your expected format
-      return {
+      // DEBUG: Log what we're extracting from each row
+      const extracted = {
         id: index + 1,
         mottaker: String(row.Mottaker || row.mottaker || '').trim(),
         your_reference: String(row['Your Reference'] || row.your_reference || '').trim(),
@@ -77,6 +83,17 @@ module.exports = async (req, res) => {
         currency: String(row.Currency || row.currency || 'NOK').trim(),
         raw_data: row
       };
+      
+      if (index < 3) { // Log first 3 rows for debugging
+        console.log(`📊 DEBUG - Row ${index + 1} extracted:`, {
+          mottaker: extracted.mottaker,
+          our_reference: extracted.our_reference,
+          your_reference: extracted.your_reference,
+          avsender: extracted.avsender
+        });
+      }
+      
+      return extracted;
     }).filter(invoice => invoice.mottaker); // Filter out empty rows
 
     // Generate import ID
