@@ -203,12 +203,24 @@ module.exports = async (req, res) => {
 
     // Process invoices in batches to avoid timeout
     console.log(`📍 Starting to process ${importInvoices.length} invoices in batches...`);
-    const batchSize = 5;
+    // Reduce batch size for Vercel timeout constraints (10 seconds max)
+    const batchSize = 3;
+    
+    // Track processing time to avoid Vercel timeout
+    const startTime = Date.now();
+    const maxProcessingTime = 8000; // 8 seconds to leave buffer for response
     
     // Track PDF attachments for later processing
     const invoiceAttachments = {};
     
     for (let i = 0; i < importInvoices.length; i += batchSize) {
+      // Check if we're approaching timeout
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime > maxProcessingTime) {
+        console.log(`⏰ Approaching timeout (${elapsedTime}ms), stopping processing at batch ${Math.floor(i/batchSize) + 1}`);
+        break;
+      }
+      
       const batch = importInvoices.slice(i, i + batchSize);
       console.log(`📍 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(importInvoices.length/batchSize)}`);
       
@@ -361,8 +373,13 @@ module.exports = async (req, res) => {
             
             // Try to attach PDF if available (same logic as working locally)
             if (invoice.declaration_pdf || invoice.pdf_data) {
-              try {
-                console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
+              // Check timeout before PDF attachment (PDF attachment takes extra time)
+              const currentElapsedTime = Date.now() - startTime;
+              if (currentElapsedTime > maxProcessingTime - 2000) { // Leave 2 seconds buffer
+                console.log(`⏰ Skipping PDF attachment due to timeout risk (${currentElapsedTime}ms)`);
+              } else {
+                try {
+                  console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
                 
                 // Get PDF data from import_data if available
                 let pdfToAttach = null;
@@ -414,19 +431,20 @@ module.exports = async (req, res) => {
                   console.log(`[${invoice.referanse}] No PDF content available for attachment`);
                 }
                 
-              } catch (pdfError) {
-                console.error(`❌ PDF attachment failed for invoice ${invoiceResp.data.Id}:`, pdfError.response?.data || pdfError.message);
-                
-                // Track failed attachment
-                if (!invoiceAttachments[invoiceResp.data.Id]) {
-                  invoiceAttachments[invoiceResp.data.Id] = [];
+                } catch (pdfError) {
+                  console.error(`❌ PDF attachment failed for invoice ${invoiceResp.data.Id}:`, pdfError.response?.data || pdfError.message);
+                  
+                  // Track failed attachment
+                  if (!invoiceAttachments[invoiceResp.data.Id]) {
+                    invoiceAttachments[invoiceResp.data.Id] = [];
+                  }
+                  invoiceAttachments[invoiceResp.data.Id].push({
+                    filename: invoice.declaration_pdf?.filename || 'unknown.pdf',
+                    status: 'failed',
+                    error: pdfError.response?.data || pdfError.message
+                  });
                 }
-                invoiceAttachments[invoiceResp.data.Id].push({
-                  filename: invoice.declaration_pdf?.filename || 'unknown.pdf',
-                  status: 'failed',
-                  error: pdfError.response?.data || pdfError.message
-                });
-              }
+              } // Close the else block for timeout check
             }
             
             results.successful++;
