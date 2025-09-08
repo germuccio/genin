@@ -124,6 +124,8 @@ module.exports = async (req, res) => {
           
           // Get processing results to enhance status information
           const processingResults = global.lastProcessingResults || {};
+          console.log(`📋 DEBUG: Processing results available:`, Object.keys(processingResults).length, 'entries');
+          console.log(`📋 DEBUG: Processing results:`, processingResults);
           
           // Map Visma drafts with enhanced status
           const vismaInvoices = drafts.map(draft => {
@@ -172,6 +174,11 @@ module.exports = async (req, res) => {
               import_id: result.referanse || 'unknown',
               customer_validation_status: 'NOT_FOUND'
             }));
+          
+          console.log(`📋 DEBUG: Found ${customerNotFoundInvoices.length} customer not found invoices`);
+          customerNotFoundInvoices.forEach(invoice => {
+            console.log(`📋 DEBUG: Customer not found invoice:`, invoice.referanse, invoice.mottaker);
+          });
           
           const allInvoices = [...vismaInvoices, ...customerNotFoundInvoices];
 

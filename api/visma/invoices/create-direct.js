@@ -353,6 +353,7 @@ module.exports = async (req, res) => {
               amount: invoice.total_cents / 100,
               filename: importInvoices[0]?.filename || 'Unknown'
             };
+            console.log(`📋 DEBUG: Stored CUSTOMER_NOT_FOUND result for ${invoice.referanse}:`, global.lastProcessingResults[invoice.referanse]);
             
             continue; // Skip this invoice entirely
           }
