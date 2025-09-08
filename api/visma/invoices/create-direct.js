@@ -78,15 +78,19 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'import_id is required' });
     }
 
-    // Handle case where processed_invoices is a string (frontend issue)
+    // PRIORITIZE import_data for Vercel (more reliable than processed_invoices)
     let importInvoices = [];
-    if (Array.isArray(processed_invoices)) {
-      importInvoices = processed_invoices;
-      console.log(`📍 Using ${importInvoices.length} invoices from processed_invoices array`);
-      // If array is empty but we have import_data with invoices, reconstruct from it
-      if (importInvoices.length === 0 && importDataLocal && Array.isArray(importDataLocal.invoices) && importDataLocal.invoices.length > 0) {
-        console.log(`⚠️ processed_invoices empty but import_data has ${importDataLocal.invoices.length} invoices. Reconstructing from import_data...`);
-        importInvoices = importDataLocal.invoices.map((invoice, index) => ({
+    
+    // First, try to use import_data if available (Vercel preferred path)
+    if (importDataLocal && Array.isArray(importDataLocal.invoices) && importDataLocal.invoices.length > 0) {
+      console.log(`📍 Using import_data with ${importDataLocal.invoices.length} invoices (Vercel path)`);
+      importInvoices = importDataLocal.invoices
+        .filter(invoice => {
+          // Only process invoices with OK status (same logic as process-import)
+          const statusCode = invoice.raw_data?.['s.NO'] || invoice.raw_data?.Status || 'OK';
+          return statusCode === 'OK';
+        })
+        .map((invoice, index) => ({
           referanse: invoice.our_reference || invoice.referanse || `REF-${Date.now()}-${index}`,
           mottaker: invoice.mottaker || `Customer ${index + 1}`,
           avsender: invoice.avsender || 'Default Sender',
@@ -98,8 +102,12 @@ module.exports = async (req, res) => {
             index: importDataLocal.pdfs[index].index
           } : null
         }));
-        console.log(`📍 Reconstructed ${importInvoices.length} invoices from import_data`);
-      }
+      console.log(`📍 Filtered to ${importInvoices.length} invoices with OK status from import_data`);
+    }
+    // Fallback to processed_invoices (local development path)
+    else if (Array.isArray(processed_invoices)) {
+      importInvoices = processed_invoices;
+      console.log(`📍 Using ${importInvoices.length} invoices from processed_invoices array (local path)`);
     } else if (typeof processed_invoices === 'string') {
       console.log(`⚠️ WARNING: processed_invoices is a string: "${processed_invoices}"`);
       console.log(`📍 This indicates data corruption during transmission - using stored data instead`);
@@ -135,8 +143,23 @@ module.exports = async (req, res) => {
         });
       }
     } else {
-      console.log(`📍 No processed_invoices data available`);
-      return res.status(400).json({ error: 'No invoice data available' });
+      console.log(`📍 No processed_invoices data available and no import_data found`);
+      console.log(`📍 Request contained:`, {
+        import_id,
+        has_processed_invoices: !!processed_invoices,
+        processed_invoices_type: typeof processed_invoices,
+        has_import_data: !!import_data,
+        import_data_type: typeof import_data
+      });
+      return res.status(400).json({ 
+        error: 'No invoice data available',
+        details: 'Neither processed_invoices nor import_data was provided or valid',
+        debug_info: {
+          import_id,
+          processed_invoices_received: typeof processed_invoices,
+          import_data_received: typeof import_data
+        }
+      });
     }
 
     // Try to get invoices from global storage first (for local development)
@@ -225,14 +248,15 @@ module.exports = async (req, res) => {
     
     // Get processing parameters from request (for resume functionality)
     const startIndex = parseInt(req.body.start_index) || 0;
-    const chunkSize = 20; // Process 20 invoices per request
+    // Reduce batch size for Vercel to avoid timeouts (based on observed performance)
+    const chunkSize = 10; // Process 10 invoices per request (was 20, but client times out)
     const endIndex = Math.min(startIndex + chunkSize, importInvoices.length);
     
     console.log(`📍 Processing chunk: invoices ${startIndex + 1}-${endIndex} of ${importInvoices.length}`);
     
     // Add timeout tracking to prevent Vercel timeout
     const processingStartTime = Date.now();
-    const MAX_PROCESSING_TIME = 8500; // 8.5 seconds to leave buffer
+    const MAX_PROCESSING_TIME = 7000; // 7 seconds to leave more buffer for Vercel's 10s limit
     
     // Process only the current chunk
     for (let i = startIndex; i < endIndex; i++) {
@@ -516,9 +540,9 @@ module.exports = async (req, res) => {
         results.errors.push(`${invoice.referanse}: Critical error - ${error.message}`);
       }
       
-      // Small delay between invoices to avoid rate limiting
-      if (i < importInvoices.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      // Small delay between invoices to avoid rate limiting (reduced for Vercel)
+      if (i < endIndex - 1) {
+        await new Promise(resolve => setTimeout(resolve, 200)); // Reduced from 500ms to 200ms
       }
     }
 

@@ -360,11 +360,24 @@ const generateInvoicesDirect = async () => {
       articleMapping,
       customerDefaults,
       customerOverrides,
-      // Pass processed invoices for Vercel stateless environment
-      processed_invoices: processResp.data.processed_invoices,
-      // Pass import data as fallback for Vercel stateless environment (only if available)
-      ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data })
+      // ALWAYS pass the original import data for Vercel stateless environment
+      // This is more reliable than the processed_invoices response
+      import_data: uploadResult.value?._vercel_import_data,
+      // Keep processed_invoices as fallback for local development
+      processed_invoices: processResp.data.processed_invoices || []
     }
+    // Validate data before sending to prevent corruption
+    console.log('🔍 DEBUG: Data validation before transmission:')
+    console.log('- import_data available:', !!requestPayload.import_data)
+    console.log('- import_data.invoices count:', requestPayload.import_data?.invoices?.length || 0)
+    console.log('- processed_invoices type:', typeof requestPayload.processed_invoices)
+    console.log('- processed_invoices count:', Array.isArray(requestPayload.processed_invoices) ? requestPayload.processed_invoices.length : 'NOT_ARRAY')
+    
+    // Ensure we have valid data before sending
+    if (!requestPayload.import_data?.invoices?.length && !Array.isArray(requestPayload.processed_invoices)) {
+      throw new Error('No valid invoice data available for transmission. Please try re-uploading your file.')
+    }
+    
     console.log('🔍 DEBUG: Full request payload:', requestPayload)
     
     const directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload)
