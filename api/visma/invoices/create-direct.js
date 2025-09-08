@@ -257,15 +257,15 @@ module.exports = async (req, res) => {
     
     // Get processing parameters from request (for resume functionality)
     const startIndex = parseInt(req.body.start_index) || 0;
-    // Reduce batch size for Vercel to avoid timeouts (based on observed performance)
-    const chunkSize = 10; // Process 10 invoices per request (was 20, but client times out)
+    // Very small batch size for Vercel based on observed performance (0.6 invoices/second)
+    const chunkSize = 5; // Process only 5 invoices per request to stay well under timeout
     const endIndex = Math.min(startIndex + chunkSize, importInvoices.length);
     
     console.log(`📍 Processing chunk: invoices ${startIndex + 1}-${endIndex} of ${importInvoices.length}`);
     
     // Add timeout tracking to prevent Vercel timeout
     const processingStartTime = Date.now();
-    const MAX_PROCESSING_TIME = 7000; // 7 seconds to leave more buffer for Vercel's 10s limit
+    const MAX_PROCESSING_TIME = 6000; // 6 seconds to leave even more buffer for Vercel's 10s limit
     
     // Process only the current chunk
     for (let i = startIndex; i < endIndex; i++) {
@@ -556,10 +556,8 @@ module.exports = async (req, res) => {
         results.errors.push(`${invoice.referanse}: Critical error - ${error.message}`);
       }
       
-      // Small delay between invoices to avoid rate limiting (reduced for Vercel)
-      if (i < endIndex - 1) {
-        await new Promise(resolve => setTimeout(resolve, 200)); // Reduced from 500ms to 200ms
-      }
+      // No delay for Vercel - we need to maximize processing in limited time
+      // Visma API can handle the rate without delays for small batches
     }
 
     console.log(`📍 Invoice creation completed: ${results.successful} successful, ${results.failed} failed`);
