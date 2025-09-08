@@ -391,6 +391,14 @@ const generateInvoicesDirect = async () => {
       try { localStorage.setItem('processingInfo', JSON.stringify(directResp.data.processing_info)) } catch {}
     }
     
+    // Store customer not found invoices for display in invoice list
+    if (directResp.data?.customer_not_found_invoices?.length > 0) {
+      try { 
+        localStorage.setItem('customerNotFoundInvoices', JSON.stringify(directResp.data.customer_not_found_invoices))
+        console.log('🔍 DEBUG: Stored customer not found invoices:', directResp.data.customer_not_found_invoices)
+      } catch {}
+    }
+    
     // Show success message only when all are completed; avoid blocking alert mid-run
     if (remaining === 0) {
       alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)

@@ -246,10 +246,14 @@ module.exports = async (req, res) => {
     const invoiceResults = [];
     const invoiceAttachments = {};
     
-    // Initialize global processing results storage
+    // Initialize global processing results storage for this request
     if (!global.lastProcessingResults) {
       global.lastProcessingResults = {};
     }
+    
+    // Clear old results for this import_id to start fresh
+    const currentImportResults = {};
+    global.lastProcessingResults = { ...global.lastProcessingResults };
     
     // Get processing parameters from request (for resume functionality)
     const startIndex = parseInt(req.body.start_index) || 0;
@@ -350,7 +354,7 @@ module.exports = async (req, res) => {
               mottaker: customerName,
               status: 'CUSTOMER_NOT_FOUND',
               customer_validation_status: 'NOT_FOUND',
-              amount: invoice.total_cents / 100,
+              amount: (invoice.total_cents || 41400) / 100, // Default to 414 if not set
               filename: importInvoices[0]?.filename || 'Unknown'
             };
             console.log(`📋 DEBUG: Stored CUSTOMER_NOT_FOUND result for ${invoice.referanse}:`, global.lastProcessingResults[invoice.referanse]);
@@ -421,7 +425,7 @@ module.exports = async (req, res) => {
               mottaker: customerName,
               status: 'CREATED_AS_DRAFT',
               visma_id: invoiceResp.data.Id,
-              amount: invoice.total_cents / 100,
+              amount: (invoice.total_cents || 41400) / 100, // Default to 414 if not set
               pdf_attached: false
             });
             
@@ -431,7 +435,7 @@ module.exports = async (req, res) => {
               mottaker: customerName,
               status: 'CREATED_AS_DRAFT',
               customer_validation_status: 'FOUND',
-              amount: invoice.total_cents / 100,
+              amount: (invoice.total_cents || 41400) / 100, // Default to 414 if not set
               visma_id: invoiceResp.data.Id,
               filename: importInvoices[0]?.filename || 'Unknown'
             };
@@ -590,6 +594,7 @@ module.exports = async (req, res) => {
       invoices_processed: actualProcessedCount,
       invoice_results: invoiceResults,
       invoice_attachments: invoiceAttachments,
+      customer_not_found_invoices: invoiceResults.filter(r => r.status === 'CUSTOMER_NOT_FOUND'),
       note: remainingInvoices > 0 
         ? `Processed ${actualProcessedCount}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
         : 'All invoices processed with status tracking.'

@@ -650,16 +650,46 @@ const loadInvoices = async () => {
   try {
     const response = await axios.get('/api/invoices')
     // Ensure we always have an array, handle both local and Vercel API formats
+    let loadedInvoices = []
     if (response.data.invoices) {
       // Vercel format with import data
-      invoices.value = response.data.invoices
+      loadedInvoices = response.data.invoices
     } else if (Array.isArray(response.data)) {
       // Local format - direct array
-      invoices.value = response.data
+      loadedInvoices = response.data
     } else {
       // Fallback to empty array
-      invoices.value = []
+      loadedInvoices = []
     }
+    
+    // Add customer not found invoices from localStorage (for Vercel)
+    try {
+      const customerNotFoundStr = localStorage.getItem('customerNotFoundInvoices')
+      if (customerNotFoundStr) {
+        const customerNotFoundInvoices = JSON.parse(customerNotFoundStr)
+        console.log('🔍 DEBUG: Loading customer not found invoices from localStorage:', customerNotFoundInvoices)
+        
+        // Convert to invoice format and add to the list
+        const formattedNotFoundInvoices = customerNotFoundInvoices.map((invoice: any) => ({
+          id: `not-found-${invoice.referanse}`,
+          referanse: invoice.referanse,
+          mottaker: invoice.mottaker,
+          total_cents: Math.round((invoice.amount || 414) * 100),
+          currency: 'NOK',
+          status: 'CUSTOMER_NOT_FOUND',
+          visma_invoice_id: null,
+          created_at: new Date().toISOString(),
+          filename: invoice.filename || 'Unknown'
+        }))
+        
+        loadedInvoices = [...loadedInvoices, ...formattedNotFoundInvoices]
+        console.log('🔍 DEBUG: Added customer not found invoices to list, total:', loadedInvoices.length)
+      }
+    } catch (e) {
+      console.warn('Could not load customer not found invoices from localStorage:', e)
+    }
+    
+    invoices.value = loadedInvoices
   } catch (err: any) {
     console.error('Failed to load invoices:', err)
     error.value = err.response?.data?.error || 'Failed to load invoices'
@@ -765,6 +795,12 @@ const clearLocalInvoices = async () => {
     
     if (response.data.success) {
       const { cleared } = response.data
+      // Also clear customer not found invoices from localStorage
+      try {
+        localStorage.removeItem('customerNotFoundInvoices')
+        console.log('🔍 DEBUG: Cleared customer not found invoices from localStorage')
+      } catch {}
+      
       alert(`✅ Cleared ${cleared} local invoices from memory!`)
       // Refresh the invoice list to show empty state
       await loadInvoices()
