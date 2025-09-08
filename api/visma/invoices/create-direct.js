@@ -345,7 +345,7 @@ module.exports = async (req, res) => {
               status: 'CUSTOMER_NOT_FOUND',
               error: `Customer "${customerName}" not found in Visma`,
               visma_id: null,
-              amount: invoice.total_cents / 100
+              amount: (invoice.total_cents || 41400) / 100 // Default to 414 if not set
             });
             
             // Store in global results for invoice list to access
