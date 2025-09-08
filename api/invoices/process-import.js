@@ -60,6 +60,7 @@ module.exports = async (req, res) => {
           unit_price: uploadedInvoice.amount,
           visma_invoice_id: null,
           status: 'draft',
+          customer_validation_status: 'PENDING', // Will be updated during creation
           created_at: new Date().toISOString(),
           
           // Business fields

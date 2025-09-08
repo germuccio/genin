@@ -78,7 +78,7 @@
               <td>{{ formatAmount(invoice.total_cents, invoice.currency) }}</td>
               <td>
                 <span :class="['status-badge', invoice.status]">
-                  {{ invoice.status }}
+                  {{ invoice.status === 'CUSTOMER_NOT_FOUND' ? 'Customer Not Found' : invoice.status }}
                 </span>
               </td>
               <td>
@@ -137,7 +137,7 @@
             <div class="detail-row">
               <strong>Status:</strong> 
               <span :class="['status-badge', selectedInvoice.status]">
-                {{ selectedInvoice.status }}
+                {{ selectedInvoice.status === 'CUSTOMER_NOT_FOUND' ? 'Customer Not Found' : selectedInvoice.status }}
               </span>
             </div>
             <div class="detail-row">
@@ -877,6 +877,13 @@ onMounted(() => {
   color: white;
 }
 
+.status-badge.CUSTOMER_NOT_FOUND {
+  background-color: #dc3545;
+  color: white;
+  font-weight: bold;
+  animation: pulse 2s infinite;
+}
+
 .visma-id {
   font-family: monospace;
   font-size: 0.875rem;
@@ -967,7 +974,18 @@ onMounted(() => {
 .visma-details {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid #dee2e6;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .visma-details pre {

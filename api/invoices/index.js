@@ -122,35 +122,71 @@ module.exports = async (req, res) => {
           const availableImports = Object.values(importGroups);
           console.log(`📋 Found ${availableImports.length} import groups with ${drafts.length} total invoices`);
           
+          // Get processing results to enhance status information
+          const processingResults = global.lastProcessingResults || {};
+          
+          // Map Visma drafts with enhanced status
+          const vismaInvoices = drafts.map(draft => {
+            // Calculate total from line items since Visma doesn't populate Amount field for drafts
+            const totalAmount = draft.Rows && draft.Rows.length > 0 
+              ? draft.Rows.reduce((sum, row) => sum + (row.UnitPrice * row.Quantity), 0)
+              : 414; // Fallback to preset price
+            
+            const referanse = draft.OurReference || draft.YourReference || `REF-${draft.Id}`;
+            const processingResult = processingResults[referanse];
+            
+            return {
+              id: draft.Id,
+              referanse: referanse,
+              your_reference: draft.YourReference,
+              mottaker: draft.CustomerName || 'Unknown',
+              avsender: 'Genin',
+              status: processingResult?.status || 'CREATED_AS_DRAFT', // Enhanced status from processing
+              total_cents: Math.round(totalAmount * 100),
+              unit_price: totalAmount,
+              currency: draft.CurrencyCode || 'NOK',
+              created_at: draft.CreatedDateTime || new Date().toISOString(),
+              visma_invoice_id: draft.Id,
+              filename: processingResult?.filename || `Import ${draft.OurReference || 'Unknown'}`,
+              import_id: draft.OurReference || 'unknown',
+              customer_validation_status: processingResult?.customer_validation_status || 'FOUND'
+            };
+          });
+          
+          // Add any customer not found invoices that didn't make it to Visma
+          const customerNotFoundInvoices = Object.values(processingResults)
+            .filter(result => result.status === 'CUSTOMER_NOT_FOUND')
+            .map(result => ({
+              id: `not-found-${result.referanse}`,
+              referanse: result.referanse,
+              your_reference: result.referanse,
+              mottaker: result.mottaker,
+              avsender: 'Genin',
+              status: 'CUSTOMER_NOT_FOUND',
+              total_cents: Math.round((result.amount || 0) * 100),
+              unit_price: result.amount || 0,
+              currency: 'NOK',
+              created_at: new Date().toISOString(),
+              visma_invoice_id: null,
+              filename: result.filename || 'Unknown',
+              import_id: result.referanse || 'unknown',
+              customer_validation_status: 'NOT_FOUND'
+            }));
+          
+          const allInvoices = [...vismaInvoices, ...customerNotFoundInvoices];
+
           // Return both import metadata and all invoices
           return res.json({
             success: true,
             available_imports: availableImports,
-            total_invoices: drafts.length,
+            total_invoices: allInvoices.length,
+            visma_drafts: drafts.length,
+            customer_not_found: customerNotFoundInvoices.length,
             // Also return all invoices for the frontend to display
-            invoices: drafts.map(draft => {
-              // Calculate total from line items since Visma doesn't populate Amount field for drafts
-              const totalAmount = draft.Rows && draft.Rows.length > 0 
-                ? draft.Rows.reduce((sum, row) => sum + (row.UnitPrice * row.Quantity), 0)
-                : 414; // Fallback to preset price
-              
-              return {
-                id: draft.Id,
-                referanse: draft.OurReference || draft.YourReference || `REF-${draft.Id}`,
-                your_reference: draft.YourReference,
-                mottaker: draft.CustomerName || 'Unknown',
-                avsender: 'Genin',
-                status: 'CREATED_AS_DRAFT', // These invoices exist in Visma, so they're created as drafts
-                total_cents: Math.round(totalAmount * 100),
-                unit_price: totalAmount,
-                currency: draft.CurrencyCode || 'NOK',
-                created_at: draft.CreatedDateTime || new Date().toISOString(),
-                visma_invoice_id: draft.Id,
-                filename: `Import ${draft.OurReference || 'Unknown'}`,
-                import_id: draft.OurReference || 'unknown'
-              };
-            }),
-            note: availableImports.length === 0 ? 'No imports found. Upload an Excel file first.' : undefined
+            invoices: allInvoices,
+            note: availableImports.length === 0 && customerNotFoundInvoices.length === 0 
+              ? 'No imports found. Upload an Excel file first.' 
+              : undefined
           });
           
         } catch (vismaError) {

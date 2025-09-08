@@ -246,6 +246,11 @@ module.exports = async (req, res) => {
     const invoiceResults = [];
     const invoiceAttachments = {};
     
+    // Initialize global processing results storage
+    if (!global.lastProcessingResults) {
+      global.lastProcessingResults = {};
+    }
+    
     // Get processing parameters from request (for resume functionality)
     const startIndex = parseInt(req.body.start_index) || 0;
     // Reduce batch size for Vercel to avoid timeouts (based on observed performance)
@@ -323,40 +328,33 @@ module.exports = async (req, res) => {
             console.error(`[${invoice.referanse}] Customer search failed:`, searchErr.response?.data || searchErr.message);
           }
           
-          // Create customer if not found
+          // Skip invoice creation if customer not found (do not auto-create customers)
           if (!customerId) {
-            console.log(`[${invoice.referanse}] Preparing to create customer "${customerName}"...`);
-            const customerData = {
-              Name: customerName, // Use PascalCase for customer creation too
-              Email: `test+${Date.now()}@example.com`, // Visma requires an email
-              IsPrivatePerson: false,
-              IsActive: true, // Add missing IsActive field
-              // Add required fields for customer creation
-              InvoiceCity: customerDefaults.city || "Oslo",
-              InvoicePostalCode: customerDefaults.postalCode || "0001",
-              InvoiceAddress: customerDefaults.address || "Ukjent adresse",
-              InvoiceCountry: customerDefaults.country || "NO",
-              // Add terms of payment ID
-              TermsOfPaymentId: termsOfPaymentId
+            console.log(`[${invoice.referanse}] ❌ Customer "${customerName}" not found in Visma - SKIPPING invoice creation`);
+            results.failed++;
+            results.errors.push(`${invoice.referanse}: CUSTOMER_NOT_FOUND - "${customerName}" does not exist in Visma`);
+            
+            // Track this invoice with customer not found status
+            invoiceResults.push({
+              referanse: invoice.referanse,
+              mottaker: customerName,
+              status: 'CUSTOMER_NOT_FOUND',
+              error: `Customer "${customerName}" not found in Visma`,
+              visma_id: null,
+              amount: invoice.total_cents / 100
+            });
+            
+            // Store in global results for invoice list to access
+            global.lastProcessingResults[invoice.referanse] = {
+              referanse: invoice.referanse,
+              mottaker: customerName,
+              status: 'CUSTOMER_NOT_FOUND',
+              customer_validation_status: 'NOT_FOUND',
+              amount: invoice.total_cents / 100,
+              filename: importInvoices[0]?.filename || 'Unknown'
             };
             
-            try {
-              const customerResp = await axios.post(`${apiBaseUrl}/v2/customers`, customerData, {
-                headers: {
-                  'Authorization': `Bearer ${tokens.access_token}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-
-              customerId = customerResp.data.Id;
-              console.log(`[${invoice.referanse}] Successfully created customer: ${customerName} (${customerId})`);
-            } catch(createErr) {
-                console.error(`[${invoice.referanse}] CRITICAL: Failed to create customer:`, createErr.response?.data || createErr.message);
-                // Skip this invoice if we can't create a customer
-                results.failed++;
-                results.errors.push(`${invoice.referanse}: Failed to find or create customer "${customerName}"`);
-                continue; 
-            }
+            continue; // Skip this invoice entirely
           }
           
           const articleId = articleMapping.ok || articleMapping['OK'] || null;
@@ -419,10 +417,23 @@ module.exports = async (req, res) => {
             // Track successful invoice creation
             invoiceResults.push({
               referanse: invoice.referanse,
+              mottaker: customerName,
               status: 'CREATED_AS_DRAFT',
               visma_id: invoiceResp.data.Id,
+              amount: invoice.total_cents / 100,
               pdf_attached: false
             });
+            
+            // Store in global results for invoice list to access
+            global.lastProcessingResults[invoice.referanse] = {
+              referanse: invoice.referanse,
+              mottaker: customerName,
+              status: 'CREATED_AS_DRAFT',
+              customer_validation_status: 'FOUND',
+              amount: invoice.total_cents / 100,
+              visma_id: invoiceResp.data.Id,
+              filename: importInvoices[0]?.filename || 'Unknown'
+            };
             
             // Try to attach PDF if available
             if (invoice.declaration_pdf || invoice.pdf_data) {
