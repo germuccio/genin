@@ -587,16 +587,16 @@ module.exports = async (req, res) => {
         import_id: import_id,
         has_remaining: true,
         remaining: remainingInvoices,
-        next_start_index: actualProcessedCount,
+        next_start_index: totalProcessedSoFar,
         total: totalInvoices,
-        processed_so_far: actualProcessedCount
+        processed_so_far: totalProcessedSoFar
       } : null,
-      invoices_processed: actualProcessedCount,
+      invoices_processed: totalProcessedSoFar,
       invoice_results: invoiceResults,
       invoice_attachments: invoiceAttachments,
       customer_not_found_invoices: invoiceResults.filter(r => r.status === 'CUSTOMER_NOT_FOUND'),
       note: remainingInvoices > 0 
-        ? `Processed ${actualProcessedCount}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
+        ? `Processed ${totalProcessedSoFar}/${totalInvoices} invoices. ${remainingInvoices} remaining - use "Continue Processing" to process the rest.`
         : 'All invoices processed with status tracking.'
     });
     } catch (error) {
@@ -615,15 +615,15 @@ module.exports = async (req, res) => {
     let partialProcessingInfo = null;
     if (typeof results !== 'undefined' && results.successful > 0) {
       const totalInvoices = importInvoices?.length || 0;
-      const actualProcessedCount = startIndex + results.successful + results.failed;
-      const remainingInvoices = totalInvoices - actualProcessedCount;
+      const totalProcessedSoFarError = startIndex + results.successful + results.failed;
+      const remainingInvoices = totalInvoices - totalProcessedSoFarError;
       
       partialProcessingInfo = {
         import_id: import_id,
         start_index: startIndex,
-        end_index: actualProcessedCount,
+        end_index: totalProcessedSoFarError,
         chunk_size: chunkSize,
-        next_start_index: remainingInvoices > 0 ? actualProcessedCount : null,
+        next_start_index: remainingInvoices > 0 ? totalProcessedSoFarError : null,
         has_remaining: remainingInvoices > 0
       };
     }
