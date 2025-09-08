@@ -298,35 +298,50 @@ module.exports = async (req, res) => {
           // Try to find existing customer first
           console.log(`[${invoice.referanse}] Searching for customer "${customerName}"...`);
           try {
-            const customerSearchResp = await axios.get(`${apiBaseUrl}/v2/customers`, {
+            // Use Visma's built-in name filtering with exact match first
+            let customerSearchResp = await axios.get(`${apiBaseUrl}/v2/customers?$filter=Name eq '${encodeURIComponent(customerName)}'`, {
               headers: {
                 'Authorization': `Bearer ${tokens.access_token}`,
                 'Content-Type': 'application/json'
               }
-              // Note: Visma API doesn't filter by name, so we get all customers and filter client-side
             });
             
+            let matchingCustomers = [];
             if (customerSearchResp.data && customerSearchResp.data.Data && customerSearchResp.data.Data.length > 0) {
-              // Filter customers by name on the client side since Visma API doesn't support name filtering
-              const matchingCustomers = customerSearchResp.data.Data.filter(customer => 
-                customer.Name && customer.Name.toLowerCase().includes(customerName.toLowerCase())
-              );
-              
-              if (matchingCustomers.length > 0) {
-                customerId = matchingCustomers[0].Id;
-                console.log(`[${invoice.referanse}] Found existing customer: ${customerName} (${customerId})`);
-              } else {
-                console.log(`[${invoice.referanse}] Customer not found, will create.`);
-              }
+              matchingCustomers = customerSearchResp.data.Data;
+              console.log(`[${invoice.referanse}] Found ${matchingCustomers.length} exact matches for "${customerName}"`);
             } else {
-               console.log(`[${invoice.referanse}] Customer not found, will create.`);
+              // If no exact match, try partial/fuzzy search by getting all customers and filtering
+              console.log(`[${invoice.referanse}] No exact match, trying partial search...`);
+              customerSearchResp = await axios.get(`${apiBaseUrl}/v2/customers?$top=1000`, {
+                headers: {
+                  'Authorization': `Bearer ${tokens.access_token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              if (customerSearchResp.data && customerSearchResp.data.Data && customerSearchResp.data.Data.length > 0) {
+                // Try partial matching (case-insensitive)
+                matchingCustomers = customerSearchResp.data.Data.filter(customer => 
+                  customer.Name && customer.Name.toLowerCase().includes(customerName.toLowerCase())
+                );
+                console.log(`[${invoice.referanse}] Found ${matchingCustomers.length} partial matches for "${customerName}"`);
+              }
             }
             
-            // DEBUG: Log the full customer search response
-            console.log(`[${invoice.referanse}] DEBUG - Customer search response:`, {
-              status: customerSearchResp.status,
-              data: customerSearchResp.data,
-              searchParams: { name: customerName }
+            if (matchingCustomers.length > 0) {
+              customerId = matchingCustomers[0].Id;
+              console.log(`[${invoice.referanse}] Found existing customer: ${matchingCustomers[0].Name} (${customerId})`);
+            } else {
+              console.log(`[${invoice.referanse}] Customer not found in ${customerSearchResp.data?.Meta?.TotalNumberOfResults || 'unknown'} total customers`);
+            }
+            
+            // DEBUG: Log search details (but not full response to avoid clutter)
+            console.log(`[${invoice.referanse}] DEBUG - Customer search:`, {
+              searchName: customerName,
+              totalCustomers: customerSearchResp.data?.Meta?.TotalNumberOfResults || 0,
+              matchesFound: matchingCustomers.length,
+              firstMatchName: matchingCustomers[0]?.Name || 'none'
             });
           } catch (searchErr) {
             console.error(`[${invoice.referanse}] Customer search failed:`, searchErr.response?.data || searchErr.message);
