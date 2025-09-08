@@ -384,18 +384,19 @@ const generateInvoicesDirect = async () => {
     console.log('✅ Direct invoice creation response:', directResp.data)
     
     // Handle chunked processing for large batches (Vercel timeout workaround)
-    let totalProcessed = directResp.data?.summary?.processed || 0
+    let currentStartIndex = directResp.data?.summary?.processed || 0 // Start with first chunk's processed count
     let totalRemaining = directResp.data?.summary?.remaining || 0
     let allResults = directResp.data?.invoice_results || []
     let allCustomerNotFound = directResp.data?.customer_not_found_invoices || []
+    let totalProcessedCount = currentStartIndex // Track total for display
     
     // Continue processing remaining invoices in chunks
-    while (totalRemaining > 0 && totalProcessed < 200) { // Safety limit
-      console.log(`🔄 Continuing processing: ${totalRemaining} invoices remaining`)
+    while (totalRemaining > 0 && totalProcessedCount < 200) { // Safety limit
+      console.log(`🔄 Continuing processing: ${totalRemaining} invoices remaining, next start_index: ${currentStartIndex}`)
       generationProgress.value = { 
         current: 3, 
         total: 4, 
-        message: `Creating invoices in Visma... (${totalProcessed} completed, ${totalRemaining} remaining)` 
+        message: `Creating invoices in Visma... (${totalProcessedCount} completed, ${totalRemaining} remaining)` 
       }
       
       // Wait a moment before next chunk to avoid overwhelming Vercel
@@ -403,16 +404,18 @@ const generateInvoicesDirect = async () => {
       
       const continuePayload = {
         ...requestPayload,
-        start_index: totalProcessed, // Continue from where we left off
+        start_index: currentStartIndex, // Use proper start index
         processing_info: directResp.data?.processing_info // Pass processing context
       }
       
       try {
         directResp = await axios.post('/api/visma/invoices/create-direct', continuePayload)
-        console.log(`✅ Chunk completed: ${directResp.data?.summary?.processed || 0} more invoices processed`)
+        const chunkProcessed = directResp.data?.summary?.processed || 0
+        console.log(`✅ Chunk completed: ${chunkProcessed} more invoices processed`)
         
-        // Accumulate results
-        totalProcessed += directResp.data?.summary?.processed || 0
+        // Update counters properly
+        currentStartIndex += chunkProcessed // Next chunk starts after this one
+        totalProcessedCount += chunkProcessed // Accumulate total for display
         totalRemaining = directResp.data?.summary?.remaining || 0
         allResults = [...allResults, ...(directResp.data?.invoice_results || [])]
         allCustomerNotFound = [...allCustomerNotFound, ...(directResp.data?.customer_not_found_invoices || [])]
@@ -429,7 +432,7 @@ const generateInvoicesDirect = async () => {
     directResp.data.customer_not_found_invoices = allCustomerNotFound
     directResp.data.summary = {
       ...directResp.data.summary,
-      total_processed: totalProcessed,
+      total_processed: totalProcessedCount,
       final_remaining: totalRemaining
     }
 

@@ -564,10 +564,11 @@ module.exports = async (req, res) => {
     
     // Calculate remaining invoices based on actual processing
     const totalInvoices = importInvoices.length;
-    const actualProcessedCount = startIndex + results.successful + results.failed;
-    const remainingInvoices = totalInvoices - actualProcessedCount;
+    const chunkProcessedCount = results.successful + results.failed; // Only this chunk's count
+    const totalProcessedSoFar = startIndex + chunkProcessedCount; // Total processed so far
+    const remainingInvoices = totalInvoices - totalProcessedSoFar;
     
-    console.log(`📍 Processing summary: started at ${startIndex}, processed ${results.successful + results.failed}, remaining ${remainingInvoices}`);
+    console.log(`📍 Processing summary: started at ${startIndex}, processed ${chunkProcessedCount}, remaining ${remainingInvoices}`);
     
     res.json({ 
       success: true,
@@ -575,7 +576,8 @@ module.exports = async (req, res) => {
         successful: results.successful,
         failed: results.failed,
         total: totalInvoices,
-        processed: actualProcessedCount,
+        processed: chunkProcessedCount, // Only this chunk's count for frontend accumulation
+        total_processed_so_far: totalProcessedSoFar, // Total for debugging
         remaining: remainingInvoices
       },
       message: `Created ${results.successful} invoices in Visma. ${results.failed} failed. ${remainingInvoices} remaining.`,
