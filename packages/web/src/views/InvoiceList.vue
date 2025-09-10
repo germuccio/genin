@@ -649,6 +649,23 @@ const continueProcessing = async () => {
     
     console.log('💫 Continue processing completed:', response.data)
     
+    // Store customer not found invoices in localStorage
+    if (response.data.customer_not_found_invoices && response.data.customer_not_found_invoices.length > 0) {
+      try {
+        const existingNotFound = JSON.parse(localStorage.getItem('customerNotFoundInvoices') || '[]')
+        const newNotFound = response.data.customer_not_found_invoices
+        const combinedNotFound = [...existingNotFound, ...newNotFound]
+        // Deduplicate by referanse
+        const uniqueNotFound = combinedNotFound.filter((invoice: any, index: number, self: any[]) => 
+          index === self.findIndex(i => i.referanse === invoice.referanse)
+        )
+        localStorage.setItem('customerNotFoundInvoices', JSON.stringify(uniqueNotFound))
+        console.log(`🔍 DEBUG: Stored ${newNotFound.length} customer not found invoices in localStorage`)
+      } catch (err) {
+        console.warn('Failed to store customer not found invoices:', err)
+      }
+    }
+    
     // Update processing info
     if (response.data.processing_info) {
       processingInfo.value = response.data.processing_info

@@ -566,6 +566,23 @@ const generateInvoicesDirect = async () => {
       totalFailed += directResp.data.summary?.failed || 0
       lastProcessingInfo = directResp.data?.processing_info
       
+      // Store customer not found invoices in localStorage
+      if (directResp.data.customer_not_found_invoices && directResp.data.customer_not_found_invoices.length > 0) {
+        try {
+          const existingNotFound = JSON.parse(localStorage.getItem('customerNotFoundInvoices') || '[]')
+          const newNotFound = directResp.data.customer_not_found_invoices
+          const combinedNotFound = [...existingNotFound, ...newNotFound]
+          // Deduplicate by referanse
+          const uniqueNotFound = combinedNotFound.filter((invoice, index, self) => 
+            index === self.findIndex(i => i.referanse === invoice.referanse)
+          )
+          localStorage.setItem('customerNotFoundInvoices', JSON.stringify(uniqueNotFound))
+          console.log(`🔍 DEBUG: Stored ${newNotFound.length} customer not found invoices in localStorage`)
+        } catch (err) {
+          console.warn('Failed to store customer not found invoices:', err)
+        }
+      }
+      
       const remaining = allInvoices.length - endIndex
       if (remaining > 0) {
         console.log(`✅ Processed ${chunk.length}. ${remaining} remaining...`)
@@ -687,6 +704,23 @@ const processSpecificImport = async (importId: number) => {
 
       totalSuccessful += directResp.data.summary?.successful || 0
       totalFailed += directResp.data.summary?.failed || 0
+      
+      // Store customer not found invoices in localStorage
+      if (directResp.data.customer_not_found_invoices && directResp.data.customer_not_found_invoices.length > 0) {
+        try {
+          const existingNotFound = JSON.parse(localStorage.getItem('customerNotFoundInvoices') || '[]')
+          const newNotFound = directResp.data.customer_not_found_invoices
+          const combinedNotFound = [...existingNotFound, ...newNotFound]
+          // Deduplicate by referanse
+          const uniqueNotFound = combinedNotFound.filter((invoice, index, self) => 
+            index === self.findIndex(i => i.referanse === invoice.referanse)
+          )
+          localStorage.setItem('customerNotFoundInvoices', JSON.stringify(uniqueNotFound))
+          console.log(`🔍 DEBUG: Stored ${newNotFound.length} customer not found invoices in localStorage`)
+        } catch (err) {
+          console.warn('Failed to store customer not found invoices:', err)
+        }
+      }
       
       const remaining = allInvoices.length - endIndex
       if (remaining > 0) {
