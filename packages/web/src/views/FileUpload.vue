@@ -371,10 +371,20 @@ const handleUpload = async () => {
     const importId = firstData.import_id
     if (!importId) throw new Error('Server did not return import_id')
 
-    // 2) Send remaining PDF batches with import_id only
+    // Prepare lightweight import_data without base64 content for chunk requests
+    const importDataLite = {
+      invoices: firstData?._vercel_import_data?.invoices || [],
+      pdfs: (firstData?._vercel_import_data?.pdfs || []).map((p: any) => ({ filename: p.filename, size: p.size, mimetype: p.mimetype, index: p.index })),
+      timestamp: firstData?._vercel_import_data?.timestamp,
+      filename: firstData?._vercel_import_data?.filename,
+      total_count: firstData?._vercel_import_data?.total_count
+    }
+
+    // 2) Send remaining PDF batches with import_id and import_data
     for (let i = 1; i < batches.length; i++) {
       const form = new FormData()
       form.append('import_id', importId)
+      try { form.append('import_data', JSON.stringify(importDataLite)) } catch {}
       batches[i].forEach(pdf => form.append('pdf', pdf))
       console.log(`📤 Uploading PDF chunk ${i}/${batches.length - 1} with ${batches[i].length} file(s) ...`)
       const resp = await axios.post('/api/upload/files', form, { headers: { 'Content-Type': 'multipart/form-data' } })

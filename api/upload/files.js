@@ -43,9 +43,18 @@ module.exports = async (req, res) => {
     console.log('📁 Files received:', Object.keys(files));
     console.log('📋 Fields received:', Object.keys(fields));
 
-    // Extract optional import_id for PDF chunk uploads
+    // Extract optional import_id and import_data for PDF chunk uploads
     const importIdField = Array.isArray(fields.import_id) ? fields.import_id[0] : fields.import_id;
     const importIdFromFields = importIdField ? String(importIdField) : null;
+    const importDataField = Array.isArray(fields.import_data) ? fields.import_data[0] : fields.import_data;
+    let importDataProvided = null;
+    if (importDataField) {
+      try {
+        importDataProvided = typeof importDataField === 'string' ? JSON.parse(importDataField) : importDataField;
+      } catch (e) {
+        console.warn('⚠️ Failed to parse import_data JSON:', e.message);
+      }
+    }
 
     // Detect files
     const excelFiles = files.excel;
@@ -62,14 +71,24 @@ module.exports = async (req, res) => {
       })));
     }
 
-    // Branch 1: PDF CHUNK UPLOAD (no Excel file, import_id provided)
-    if (!uploadedFile && importIdFromFields) {
-      if (!global.processedImports[importIdFromFields]) {
-        return res.status(400).json({ error: 'Invalid import_id for PDF chunk upload' });
+    // Branch 1: PDF CHUNK UPLOAD (no Excel file). Use provided import_data if available, else try global by import_id
+    if (!uploadedFile && (importIdFromFields || importDataProvided)) {
+      let existing = null;
+      if (importDataProvided && Array.isArray(importDataProvided.invoices)) {
+        existing = {
+          invoices: importDataProvided.invoices || [],
+          pdfs: importDataProvided.pdfs || [],
+          timestamp: importDataProvided.timestamp || new Date().toISOString(),
+          filename: importDataProvided.filename || 'Unknown',
+          total_count: importDataProvided.total_count || (importDataProvided.invoices?.length || 0)
+        };
+      } else if (importIdFromFields && global.processedImports[importIdFromFields]) {
+        existing = global.processedImports[importIdFromFields];
       }
 
-      // Append PDFs to existing import record
-      const existing = global.processedImports[importIdFromFields];
+      if (!existing) {
+        return res.status(400).json({ error: 'Invalid import_id for PDF chunk upload' });
+      }
       const processedPdfs = [];
       if (pdfFiles && (Array.isArray(pdfFiles) ? pdfFiles.length > 0 : pdfFiles)) {
         const pdfArray = Array.isArray(pdfFiles) ? pdfFiles : [pdfFiles];
@@ -104,8 +123,9 @@ module.exports = async (req, res) => {
         });
       }
 
-      // Merge into existing
-      existing.pdfs = [...(existing.pdfs || []), ...processedPdfs];
+      // Merge into existing (avoid duplicating by filename+size)
+      const existingKey = new Set((existing.pdfs || []).map(p => `${p.filename}:${p.size}`));
+      processedPdfs.forEach(p => { if (!existingKey.has(`${p.filename}:${p.size}`)) existing.pdfs.push(p); });
       existing.timestamp = new Date().toISOString();
 
       // Build response similar to initial upload
@@ -116,11 +136,11 @@ module.exports = async (req, res) => {
         total_rows: existing.invoices.length,
         valid_rows: existing.invoices.length,
         errors: [],
-        pdf_files: existing.pdfs,
+        pdf_files: existing.pdfs.map(({ content, ...rest }) => rest),
         message: `Added ${processedPdfs.length} PDFs to import ${importIdFromFields}. Total PDFs: ${existing.pdfs.length}`,
         _vercel_import_data: {
           invoices: existing.invoices,
-          pdfs: existing.pdfs,
+          pdfs: existing.pdfs.map(({ content, ...rest }) => rest),
           timestamp: existing.timestamp,
           filename: existing.filename,
           total_count: existing.invoices.length
