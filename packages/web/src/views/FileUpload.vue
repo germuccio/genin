@@ -280,16 +280,49 @@ const loadPersistedUploadResult = () => {
   }
 }
 
-// Save upload result to localStorage
+// Save upload result to localStorage (lightweight version to prevent quota issues)
 const saveUploadResult = (result: UploadResult) => {
   try {
+    // Create a lightweight version without base64 content to prevent quota issues
+    const lightweightResult = {
+      ...result,
+      _vercel_import_data: result._vercel_import_data ? {
+        ...result._vercel_import_data,
+        pdfs: (result._vercel_import_data as any)?.pdfs ? 
+          (result._vercel_import_data as any).pdfs.map((pdf: any) => ({
+            filename: pdf.filename,
+            size: pdf.size,
+            mimetype: pdf.mimetype,
+            index: pdf.index
+            // Deliberately exclude 'content' to save space
+          })) : []
+      } : undefined
+    }
+    
     const toSave = {
-      data: result,
+      data: lightweightResult,
       timestamp: Date.now()
     }
     localStorage.setItem('lastUploadResult', JSON.stringify(toSave))
   } catch (err) {
     console.warn('Failed to save upload result:', err)
+    // If still too large, save only essential data
+    try {
+      const minimal = {
+        data: {
+          import_id: result.import_id,
+          filename: result.filename,
+          status: result.status,
+          total_rows: result.total_rows,
+          valid_rows: result.valid_rows,
+          errors: result.errors || []
+        },
+        timestamp: Date.now()
+      }
+      localStorage.setItem('lastUploadResult', JSON.stringify(minimal))
+    } catch (minimalErr) {
+      console.warn('Failed to save even minimal upload result:', minimalErr)
+    }
   }
 }
 

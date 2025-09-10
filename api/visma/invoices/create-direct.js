@@ -513,20 +513,37 @@ module.exports = async (req, res) => {
                 if (pdfToAttach && !pdfToAttach.content && import_id && global.processedImports && global.processedImports[import_id]) {
                   try {
                     const stored = global.processedImports[import_id];
+                    console.log(`[${invoice.referanse}] Attempting to recover PDF content from global store. Available PDFs: ${stored.pdfs?.length || 0}`);
+                    console.log(`[${invoice.referanse}] Looking for PDF: ${pdfToAttach.filename} (size: ${pdfToAttach.size}, index: ${pdfToAttach.index})`);
+                    
                     let match = null;
                     // Prefer index match if present
                     if (typeof pdfToAttach.index === 'number' && stored.pdfs && stored.pdfs[pdfToAttach.index]) {
                       match = stored.pdfs[pdfToAttach.index];
+                      console.log(`[${invoice.referanse}] Found by index ${pdfToAttach.index}: ${match.filename}`);
                     }
                     // Fallback to filename+size match
                     if (!match && Array.isArray(stored.pdfs)) {
                       match = stored.pdfs.find(p => p.filename === pdfToAttach.filename && p.size === pdfToAttach.size);
+                      if (match) {
+                        console.log(`[${invoice.referanse}] Found by filename+size: ${match.filename}`);
+                      }
                     }
+                    // Last resort: try filename only (without " copy" suffix)
+                    if (!match && Array.isArray(stored.pdfs)) {
+                      const baseFilename = pdfToAttach.filename.replace(/ copy.*\.pdf$/, '.pdf');
+                      match = stored.pdfs.find(p => p.filename === baseFilename || p.filename.startsWith(baseFilename.replace('.pdf', '')));
+                      if (match) {
+                        console.log(`[${invoice.referanse}] Found by base filename: ${match.filename} (searched for: ${baseFilename})`);
+                      }
+                    }
+                    
                     if (match && match.content) {
                       pdfToAttach = { ...pdfToAttach, content: match.content };
-                      console.log(`[${invoice.referanse}] Recovered PDF content from global store for ${pdfToAttach.filename}`);
+                      console.log(`[${invoice.referanse}] ✅ Recovered PDF content from global store for ${pdfToAttach.filename} (${match.content.length} chars)`);
                     } else {
-                      console.log(`[${invoice.referanse}] Could not recover PDF content from global store for ${pdfToAttach?.filename}`);
+                      console.log(`[${invoice.referanse}] ❌ Could not recover PDF content from global store for ${pdfToAttach?.filename}`);
+                      console.log(`[${invoice.referanse}] Available PDFs in store:`, stored.pdfs?.map(p => `${p.filename} (${p.size}b, hasContent: ${!!p.content})`));
                     }
                   } catch (recoverErr) {
                     console.warn(`[${invoice.referanse}] PDF content recovery failed:`, recoverErr.message);
