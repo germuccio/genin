@@ -128,6 +128,18 @@ module.exports = async (req, res) => {
       processedPdfs.forEach(p => { if (!existingKey.has(`${p.filename}:${p.size}`)) existing.pdfs.push(p); });
       existing.timestamp = new Date().toISOString();
 
+      // Ensure global storage is updated for later retrieval of base64 content by import_id
+      if (importIdFromFields) {
+        if (!global.processedImports[importIdFromFields]) {
+          global.processedImports[importIdFromFields] = existing;
+        } else {
+          const g = global.processedImports[importIdFromFields];
+          const gKey = new Set((g.pdfs || []).map(p => `${p.filename}:${p.size}`));
+          (processedPdfs || []).forEach(p => { if (!gKey.has(`${p.filename}:${p.size}`)) g.pdfs.push(p); });
+          g.timestamp = existing.timestamp;
+        }
+      }
+
       // Build response similar to initial upload
       return res.json({
         import_id: importIdFromFields,

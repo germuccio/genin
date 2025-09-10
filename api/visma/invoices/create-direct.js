@@ -470,6 +470,30 @@ module.exports = async (req, res) => {
                   }
                 }
                 
+                // If no inline content (because of chunked, metadata-only uploads), try to recover from global store by import_id
+                if (pdfToAttach && !pdfToAttach.content && import_id && global.processedImports && global.processedImports[import_id]) {
+                  try {
+                    const stored = global.processedImports[import_id];
+                    let match = null;
+                    // Prefer index match if present
+                    if (typeof pdfToAttach.index === 'number' && stored.pdfs && stored.pdfs[pdfToAttach.index]) {
+                      match = stored.pdfs[pdfToAttach.index];
+                    }
+                    // Fallback to filename+size match
+                    if (!match && Array.isArray(stored.pdfs)) {
+                      match = stored.pdfs.find(p => p.filename === pdfToAttach.filename && p.size === pdfToAttach.size);
+                    }
+                    if (match && match.content) {
+                      pdfToAttach = { ...pdfToAttach, content: match.content };
+                      console.log(`[${invoice.referanse}] Recovered PDF content from global store for ${pdfToAttach.filename}`);
+                    } else {
+                      console.log(`[${invoice.referanse}] Could not recover PDF content from global store for ${pdfToAttach?.filename}`);
+                    }
+                  } catch (recoverErr) {
+                    console.warn(`[${invoice.referanse}] PDF content recovery failed:`, recoverErr.message);
+                  }
+                }
+
                 if (pdfToAttach && pdfToAttach.content) {
                   console.log(`[${invoice.referanse}] Found PDF to attach: ${pdfToAttach.filename}`);
                   
