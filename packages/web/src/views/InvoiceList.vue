@@ -78,8 +78,15 @@
               <td>{{ formatAmount(invoice.total_cents, invoice.currency) }}</td>
               <td>
                 <span :class="['status-badge', invoice.status]">
-                  {{ invoice.status === 'CUSTOMER_NOT_FOUND' ? 'Customer Not Found' : invoice.status }}
+                  {{ invoice.status === 'CUSTOMER_NOT_FOUND' ? 'Customer Not Found' : 
+                     invoice.status === 'FAILED' ? 'Failed' : 
+                     invoice.status === 'ERROR' ? 'Error' : 
+                     invoice.status === 'REJECTED' ? 'Rejected' : 
+                     invoice.status }}
                 </span>
+                <div v-if="invoice.status === 'FAILED' && invoice.error_message" class="error-details">
+                  <small class="text-danger">{{ invoice.error_message }}</small>
+                </div>
               </td>
               <td>
                 <span v-if="invoice.visma_invoice_id" class="visma-id">
@@ -245,7 +252,7 @@ import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 
 interface Invoice {
-  id: number
+  id: number | string
   total_cents: number
   currency: string
   visma_invoice_id: string | null
@@ -255,13 +262,14 @@ interface Invoice {
   mottaker: string | null
   filename: string | null
   visma_details?: any
+  error_message?: string
 }
 
 const invoices = ref<Invoice[]>([])
 const selectedInvoice = ref<Invoice | null>(null)
 const isLoading = ref(false)
 const error = ref('')
-const sendingInvoices = ref(new Set<number>())
+const sendingInvoices = ref(new Set<number | string>())
 const isCreatingInVisma = ref(false)
 
 const isValidating = ref(false)
@@ -755,7 +763,7 @@ const loadInvoices = async () => {
   }
 }
 
-const viewInvoice = async (invoiceId: number) => {
+const viewInvoice = async (invoiceId: number | string) => {
   try {
     const response = await axios.get(`/api/invoices/${invoiceId}`)
     selectedInvoice.value = response.data
@@ -765,7 +773,7 @@ const viewInvoice = async (invoiceId: number) => {
   }
 }
 
-const sendInvoice = async (invoiceId: number) => {
+const sendInvoice = async (invoiceId: number | string) => {
   if (!confirm('Are you sure you want to send this invoice? This action cannot be undone.')) {
     return
   }
@@ -1145,6 +1153,17 @@ onMounted(() => {
 .checkbox-group input[type="checkbox"] {
   margin-right: 0.5rem;
   width: auto;
+}
+
+.error-details {
+  margin-top: 0.25rem;
+}
+
+.error-details small {
+  font-size: 0.75rem;
+  word-break: break-word;
+  max-width: 200px;
+  display: block;
 }
 
 @media (max-width: 768px) {

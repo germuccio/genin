@@ -664,6 +664,50 @@ module.exports = async (req, res) => {
 
     console.log(`📍 Invoice creation completed: ${results.successful} successful, ${results.failed} failed`);
     
+    // Store failed invoices in global storage so they can be retrieved later
+    if (invoiceResults.length > 0) {
+      console.log(`📍 Storing ${invoiceResults.length} failed invoices in global storage`);
+      
+      invoiceResults.forEach(failedResult => {
+        // Find the original invoice data to get full details
+        const originalInvoice = importInvoices.find(inv => inv.referanse === failedResult.referanse);
+        if (originalInvoice) {
+          const failedInvoice = {
+            id: `failed-${failedResult.referanse}-${Date.now()}`,
+            import_id: import_id,
+            referanse: failedResult.referanse,
+            mottaker: originalInvoice.mottaker,
+            avsender: originalInvoice.avsender || 'Genin',
+            total_cents: originalInvoice.total_cents || Math.round((originalInvoice.amount || 414) * 100),
+            unit_price: originalInvoice.amount || 414,
+            currency: originalInvoice.currency || 'NOK',
+            status: 'FAILED',
+            error_message: failedResult.error,
+            visma_invoice_id: null,
+            created_at: new Date().toISOString(),
+            filename: originalInvoice.filename || 'Unknown',
+            customer_validation_status: 'FAILED',
+            service_description: 'Transport service'
+          };
+          
+          // Initialize global.invoices if it doesn't exist
+          if (!global.invoices) {
+            global.invoices = [];
+          }
+          
+          // Check if this failed invoice already exists to avoid duplicates
+          const existingFailed = global.invoices.find(inv => 
+            inv.referanse === failedResult.referanse && inv.status === 'FAILED'
+          );
+          
+          if (!existingFailed) {
+            global.invoices.push(failedInvoice);
+            console.log(`📍 Stored failed invoice: ${failedResult.referanse} - ${failedResult.error}`);
+          }
+        }
+      });
+    }
+    
     // Calculate remaining invoices based on actual processing
     const totalInvoices = importInvoices.length;
     const chunkProcessedCount = results.successful + results.failed; // Only this chunk's count
