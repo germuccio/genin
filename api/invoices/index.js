@@ -163,7 +163,26 @@ module.exports = async (req, res) => {
           const customerNotFoundResults = allProcessingResults.filter(result => result.status === 'CUSTOMER_NOT_FOUND');
           console.log(`📋 DEBUG: Customer not found results:`, customerNotFoundResults);
           
-          const customerNotFoundInvoices = customerNotFoundResults.map(result => ({
+          // Also check global.processedImports for persistent CUSTOMER_NOT_FOUND invoices
+          let persistentCustomerNotFound = [];
+          if (global.processedImports) {
+            console.log(`📋 DEBUG: Checking global.processedImports for customer not found invoices`);
+            Object.values(global.processedImports).forEach(importData => {
+              if (importData.customer_not_found_invoices) {
+                persistentCustomerNotFound = persistentCustomerNotFound.concat(importData.customer_not_found_invoices);
+                console.log(`📋 DEBUG: Found ${importData.customer_not_found_invoices.length} customer not found invoices in import data`);
+              }
+            });
+          }
+          console.log(`📋 DEBUG: Persistent customer not found invoices:`, persistentCustomerNotFound);
+          
+          // Combine both sources and deduplicate
+          const allCustomerNotFound = [...customerNotFoundResults, ...persistentCustomerNotFound];
+          const uniqueCustomerNotFound = allCustomerNotFound.filter((invoice, index, self) => 
+            index === self.findIndex(i => i.referanse === invoice.referanse)
+          );
+          
+          const customerNotFoundInvoices = uniqueCustomerNotFound.map(result => ({
             id: `not-found-${result.referanse}`,
             referanse: result.referanse,
             your_reference: result.referanse,

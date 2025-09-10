@@ -419,6 +419,35 @@ module.exports = async (req, res) => {
             };
             console.log(`📋 DEBUG: Stored CUSTOMER_NOT_FOUND result for ${invoice.referanse}:`, global.lastProcessingResults[invoice.referanse]);
             
+            // Also store in persistent global.processedImports for cross-function access
+            if (!global.processedImports) {
+              global.processedImports = {};
+            }
+            if (!global.processedImports[import_id]) {
+              global.processedImports[import_id] = {};
+            }
+            if (!global.processedImports[import_id].customer_not_found_invoices) {
+              global.processedImports[import_id].customer_not_found_invoices = [];
+            }
+            
+            const customerNotFoundInvoice = {
+              referanse: invoice.referanse,
+              mottaker: customerName,
+              amount: (invoice.total_cents || 41400) / 100,
+              filename: importInvoices[0]?.filename || 'Unknown',
+              error: `Customer "${customerName}" not found in Visma`
+            };
+            
+            // Check if this customer not found invoice already exists to avoid duplicates
+            const existingNotFound = global.processedImports[import_id].customer_not_found_invoices.find(inv => 
+              inv.referanse === invoice.referanse
+            );
+            
+            if (!existingNotFound) {
+              global.processedImports[import_id].customer_not_found_invoices.push(customerNotFoundInvoice);
+              console.log(`📋 DEBUG: Stored CUSTOMER_NOT_FOUND in persistent storage for ${invoice.referanse}:`, customerNotFoundInvoice);
+            }
+            
             continue; // Skip this invoice entirely
           }
           
