@@ -400,6 +400,8 @@ const handleUpload = async () => {
     firstData.errors = firstData.errors || []
     uploadResult.value = firstData
     saveUploadResult(firstData)
+    // Save content map from first response too
+    try { localStorage.setItem('pdfContentMap', JSON.stringify(firstData.pdf_content_map || {})) } catch {}
 
     const importId = firstData.import_id
     if (!importId) throw new Error('Server did not return import_id')

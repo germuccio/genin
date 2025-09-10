@@ -294,6 +294,11 @@ module.exports = async (req, res) => {
       console.warn('Could not clean up temp file:', err.message);
     }
 
+    // Build content map for initial batch as well
+    const initialContentMap = Object.fromEntries(processedPdfs
+      .filter(p => !!p.content)
+      .map(p => [p.filename, p.content]));
+
     // Return success response in the format expected by frontend
     res.json({ 
       import_id: import_id,
@@ -304,6 +309,7 @@ module.exports = async (req, res) => {
       errors: [],
       pdf_files: processedPdfs, // Now includes processed PDF metadata
       message: `Successfully processed ${processedInvoices.length} invoices from ${uploadedFile.originalFilename}`,
+      pdf_content_map: initialContentMap,
       // Include the processed data for Vercel stateless environment
       _vercel_import_data: {
         invoices: processedInvoices,
