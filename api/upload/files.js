@@ -142,7 +142,7 @@ module.exports = async (req, res) => {
 
       // Build response similar to initial upload
       // Also include a minimal pdf_content_map for this chunk to help immediate attachment
-      const contentMap = Object.fromEntries(processedPdfs
+      const contentMap = Object.fromEntries((processedPdfs || [])
         .filter(p => !!p.content)
         .map(p => [p.filename, p.content]));
       
@@ -245,8 +245,15 @@ module.exports = async (req, res) => {
           let pdfContent = null;
           try {
             if (pdfFile.filepath) {
-              pdfContent = fs.readFileSync(pdfFile.filepath);
-            } else if (pdfFile.buffer) {
+              const path = pdfFile.filepath;
+              const exists = fs.existsSync(path);
+              if (exists) {
+                pdfContent = fs.readFileSync(path);
+              } else {
+                console.warn(`⚠️ Temp file does not exist for ${pdfFile.originalFilename}: ${path}`);
+              }
+            }
+            if (!pdfContent && pdfFile.buffer) {
               pdfContent = pdfFile.buffer;
             }
           } catch (err) {
@@ -265,11 +272,14 @@ module.exports = async (req, res) => {
           };
           
           processedPdfs.push(pdfData);
-          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (${pdfFile.size} bytes)`);
+          console.log(`✅ Processed PDF: ${pdfFile.originalFilename} (${pdfFile.size} bytes) - hasContent: ${!!pdfData.content}`);
         } catch (error) {
           console.error(`❌ Error processing PDF ${pdfFile.originalFilename}:`, error);
         }
       });
+
+      const withContent = processedPdfs.filter(p => !!p.content).length;
+      console.log(`📦 PDF content availability: ${withContent}/${processedPdfs.length} PDFs include base64 content`);
     } else {
       console.log('📄 No PDF files uploaded');
     }
@@ -295,7 +305,7 @@ module.exports = async (req, res) => {
     }
 
     // Build content map for initial batch as well
-    const initialContentMap = Object.fromEntries(processedPdfs
+    const initialContentMap = Object.fromEntries((processedPdfs || [])
       .filter(p => !!p.content)
       .map(p => [p.filename, p.content]));
 

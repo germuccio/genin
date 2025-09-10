@@ -401,7 +401,11 @@ const handleUpload = async () => {
     uploadResult.value = firstData
     saveUploadResult(firstData)
     // Save content map from first response too
-    try { localStorage.setItem('pdfContentMap', JSON.stringify(firstData.pdf_content_map || {})) } catch {}
+    try {
+      const existingMap = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
+      const merged = { ...existingMap, ...(firstData.pdf_content_map || {}) }
+      localStorage.setItem('pdfContentMap', JSON.stringify(merged))
+    } catch {}
 
     const importId = firstData.import_id
     if (!importId) throw new Error('Server did not return import_id')
@@ -429,7 +433,11 @@ const handleUpload = async () => {
         uploadResult.value = data // keep latest snapshot (has merged pdfs)
         saveUploadResult(data)
         // Store latest content map for immediate next step usage
-        try { localStorage.setItem('pdfContentMap', JSON.stringify(data.pdf_content_map || {})) } catch {}
+        try {
+          const existingMap2 = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
+          const merged2 = { ...existingMap2, ...(data.pdf_content_map || {}) }
+          localStorage.setItem('pdfContentMap', JSON.stringify(merged2))
+        } catch {}
       }
     }
 
