@@ -49,9 +49,9 @@
         </div>
       </div>
 
-      <div v-if="isLoading && invoices.length === 0" class="spinner"></div>
+      <div v-if="isLoading && sortedInvoices.length === 0" class="spinner"></div>
 
-      <div v-else-if="invoices.length === 0" class="empty-state">
+      <div v-else-if="sortedInvoices.length === 0" class="empty-state">
         <p>No invoices found. Upload and process some files first.</p>
         <router-link to="/" class="btn">Upload Files</router-link>
       </div>
@@ -71,7 +71,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="invoice in invoices" :key="invoice.id">
+            <tr v-for="invoice in sortedInvoices" :key="invoice.id">
               <td>{{ invoice.id }}</td>
               <td>{{ invoice.referanse || '-' }}</td>
               <td>{{ invoice.mottaker || '-' }}</td>
@@ -283,11 +283,11 @@ const customerDefaults = ref({
 
 // Computed properties for local drafts
 const hasLocalDrafts = computed(() => {
-  return invoices.value.some(invoice => !invoice.visma_invoice_id)
+  return sortedInvoices.value.some(invoice => !invoice.visma_invoice_id)
 })
 
 const localDraftsCount = computed(() => {
-  return invoices.value.filter(invoice => !invoice.visma_invoice_id).length
+  return sortedInvoices.value.filter(invoice => !invoice.visma_invoice_id).length
 })
 
 const isCustomerFormValid = computed(() => {
@@ -299,7 +299,7 @@ const isCustomerFormValid = computed(() => {
 
 const customersNeedingInfo = computed(() => {
   const names = new Set<string>()
-  invoices.value
+  sortedInvoices.value
     .filter(inv => !inv.visma_invoice_id)
     .forEach(inv => { if (inv.mottaker) names.add(inv.mottaker) })
   return Array.from(names)
@@ -318,6 +318,23 @@ const hasIncompleteProcessing = computed(() => {
 
 const remainingInvoicesCount = computed(() => {
   return processingInfo.value?.remaining || 0
+})
+
+// Sort invoices with failed ones at the top
+const sortedInvoices = computed(() => {
+  return [...invoices.value].sort((a, b) => {
+    // Define failed statuses
+    const failedStatuses = ['CUSTOMER_NOT_FOUND', 'ERROR', 'FAILED', 'REJECTED']
+    const aIsFailed = failedStatuses.includes(a.status)
+    const bIsFailed = failedStatuses.includes(b.status)
+    
+    // Failed invoices first
+    if (aIsFailed && !bIsFailed) return -1
+    if (!aIsFailed && bIsFailed) return 1
+    
+    // Within same category, sort by created date (newest first)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
 })
 
 const validateAndCreateInvoices = async () => {
