@@ -711,45 +711,10 @@ module.exports = async (req, res) => {
       });
     }
     
-    // Store customer not found invoices in the proper storage mechanism
+    // Note: CUSTOMER_NOT_FOUND invoices are already stored in global.lastProcessingResults
+    // during the processing loop above, so no additional storage needed here
     if (customerNotFoundResults.length > 0) {
-      console.log(`📍 Storing ${customerNotFoundResults.length} customer not found invoices`);
-      
-      // Initialize global.processedImports if it doesn't exist
-      if (!global.processedImports) {
-        global.processedImports = {};
-      }
-      
-      if (!global.processedImports[import_id]) {
-        global.processedImports[import_id] = {};
-      }
-      
-      if (!global.processedImports[import_id].customer_not_found_invoices) {
-        global.processedImports[import_id].customer_not_found_invoices = [];
-      }
-      
-      customerNotFoundResults.forEach(result => {
-        const originalInvoice = importInvoices.find(inv => inv.referanse === result.referanse);
-        if (originalInvoice) {
-          const customerNotFoundInvoice = {
-            referanse: result.referanse,
-            mottaker: result.mottaker,
-            amount: originalInvoice.amount || 414,
-            filename: originalInvoice.filename || 'Unknown',
-            error: result.error
-          };
-          
-          // Check if this customer not found invoice already exists to avoid duplicates
-          const existingNotFound = global.processedImports[import_id].customer_not_found_invoices.find(inv => 
-            inv.referanse === result.referanse
-          );
-          
-          if (!existingNotFound) {
-            global.processedImports[import_id].customer_not_found_invoices.push(customerNotFoundInvoice);
-            console.log(`📍 Stored customer not found invoice: ${result.referanse} - ${result.mottaker}`);
-          }
-        }
-      });
+      console.log(`📍 ${customerNotFoundResults.length} customer not found invoices already stored in global.lastProcessingResults`);
     }
     
     // Calculate remaining invoices based on actual processing
