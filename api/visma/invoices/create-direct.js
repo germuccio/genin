@@ -90,18 +90,40 @@ module.exports = async (req, res) => {
           const statusCode = invoice.raw_data?.['s.NO'] || invoice.raw_data?.Status || 'OK';
           return statusCode === 'OK';
         })
-        .map((invoice, index) => ({
-          referanse: invoice.our_reference || invoice.referanse || `REF-${Date.now()}-${index}`,
-          mottaker: invoice.mottaker || `Customer ${index + 1}`,
-          avsender: invoice.avsender || 'Default Sender',
-          currency: invoice.currency || 'NOK',
-          declaration_pdf: importDataLocal.pdfs && importDataLocal.pdfs[index] ? {
-            filename: importDataLocal.pdfs[index].filename,
-            size: importDataLocal.pdfs[index].size,
-            mimetype: importDataLocal.pdfs[index].mimetype,
-            index: importDataLocal.pdfs[index].index
-          } : null
-        }));
+        .map((invoice, index) => {
+          const referanse = invoice.our_reference || invoice.referanse || `REF-${Date.now()}-${index}`;
+          
+          // Try to match PDF by filename containing the invoice reference or line declaration number
+          let matchedPdf = null;
+          if (importDataLocal.pdfs && Array.isArray(importDataLocal.pdfs)) {
+            // First try to match by "Linjedekl. nr." from Excel (this should match PDF filename)
+            const lineDeclarationNr = invoice.raw_data?.['Linjedekl. nr.'] || invoice.raw_data?.['Line Declaration Nr'];
+            if (lineDeclarationNr) {
+              matchedPdf = importDataLocal.pdfs.find(pdf => pdf.filename && pdf.filename.includes(lineDeclarationNr));
+            }
+            // Fallback: try to match by invoice reference
+            if (!matchedPdf) {
+              matchedPdf = importDataLocal.pdfs.find(pdf => pdf.filename && pdf.filename.includes(referanse));
+            }
+            // Last resort: try by index (original logic)
+            if (!matchedPdf && importDataLocal.pdfs[index]) {
+              matchedPdf = importDataLocal.pdfs[index];
+            }
+          }
+          
+          return {
+            referanse,
+            mottaker: invoice.mottaker || `Customer ${index + 1}`,
+            avsender: invoice.avsender || 'Default Sender',
+            currency: invoice.currency || 'NOK',
+            declaration_pdf: matchedPdf ? {
+              filename: matchedPdf.filename,
+              size: matchedPdf.size,
+              mimetype: matchedPdf.mimetype,
+              index: matchedPdf.index
+            } : null
+          };
+        });
       console.log(`📍 Filtered to ${importInvoices.length} invoices with OK status from import_data`);
     }
     // Fallback to processed_invoices (local development path)
@@ -117,18 +139,40 @@ module.exports = async (req, res) => {
         const storedData = global.processedImports[import_id];
         console.log(`📍 Found stored data for import_id: ${import_id} with ${storedData.invoices.length} invoices`);
         
-        importInvoices = storedData.invoices.map((invoice, index) => ({
-          referanse: invoice.our_reference || invoice.referanse || `REF-${Date.now()}-${index}`,
-          mottaker: invoice.mottaker || `Customer ${index + 1}`,
-          avsender: invoice.avsender || 'Default Sender',
-          currency: invoice.currency || 'NOK',
-          declaration_pdf: storedData.pdfs && storedData.pdfs[index] ? {
-            filename: storedData.pdfs[index].filename,
-            size: storedData.pdfs[index].size,
-            mimetype: storedData.pdfs[index].mimetype,
-            index: storedData.pdfs[index].index
-          } : null
-        }));
+        importInvoices = storedData.invoices.map((invoice, index) => {
+          const referanse = invoice.our_reference || invoice.referanse || `REF-${Date.now()}-${index}`;
+          
+          // Try to match PDF by filename containing the invoice reference or line declaration number
+          let matchedPdf = null;
+          if (storedData.pdfs && Array.isArray(storedData.pdfs)) {
+            // First try to match by "Linjedekl. nr." from Excel (this should match PDF filename)
+            const lineDeclarationNr = invoice.raw_data?.['Linjedekl. nr.'] || invoice.raw_data?.['Line Declaration Nr'];
+            if (lineDeclarationNr) {
+              matchedPdf = storedData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(lineDeclarationNr));
+            }
+            // Fallback: try to match by invoice reference
+            if (!matchedPdf) {
+              matchedPdf = storedData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(referanse));
+            }
+            // Last resort: try by index (original logic)
+            if (!matchedPdf && storedData.pdfs[index]) {
+              matchedPdf = storedData.pdfs[index];
+            }
+          }
+          
+          return {
+            referanse,
+            mottaker: invoice.mottaker || `Customer ${index + 1}`,
+            avsender: invoice.avsender || 'Default Sender',
+            currency: invoice.currency || 'NOK',
+            declaration_pdf: matchedPdf ? {
+              filename: matchedPdf.filename,
+              size: matchedPdf.size,
+              mimetype: matchedPdf.mimetype,
+              index: matchedPdf.index
+            } : null
+          };
+        });
         console.log(`📍 Successfully reconstructed ${importInvoices.length} invoices from stored data`);
         
         // Store the import_data for PDF attachment
@@ -460,15 +504,10 @@ module.exports = async (req, res) => {
               try {
                 console.log(`[${invoice.referanse}] Attempting to attach PDF...`);
               
-                // Get PDF data from import_data if available
-                let pdfToAttach = null;
-                if (importDataLocal && importDataLocal.pdfs && Array.isArray(importDataLocal.pdfs)) {
-                  // Find PDF by index or filename
-                  const pdfIndex = invoice.declaration_pdf?.index || 0;
-                  if (importDataLocal.pdfs[pdfIndex]) {
-                    pdfToAttach = importDataLocal.pdfs[pdfIndex];
-                  }
-                }
+                // Use the pre-matched PDF from declaration_pdf
+                let pdfToAttach = invoice.declaration_pdf;
+                
+                console.log(`[${invoice.referanse}] PDF to attach:`, pdfToAttach ? `${pdfToAttach.filename} (${pdfToAttach.size} bytes)` : 'none');
                 
                 // If no inline content (because of chunked, metadata-only uploads), try to recover from global store by import_id
                 if (pdfToAttach && !pdfToAttach.content && import_id && global.processedImports && global.processedImports[import_id]) {
