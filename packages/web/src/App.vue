@@ -46,8 +46,14 @@ const vismaStore = useVismaStore()
 const apiMode = ref('TEST'); // Default to TEST
 
 const vismaStatusClass = computed(() => {
-  if (apiMode.value === 'LIVE' && vismaStore.isConnected) return 'status-live';
-  return vismaStore.isConnected ? 'status-connected' : 'status-disconnected';
+  if (vismaStore.isConnected) {
+    // Green for test environment connected (safe)
+    if (apiMode.value === 'TEST') return 'status-connected';
+    // Orange for live environment connected (caution - production)
+    return 'status-live-connected';
+  }
+  // Yellow for disconnected (warning state)
+  return 'status-disconnected';
 });
 
 const vismaStatusText = computed(() => {
@@ -120,6 +126,12 @@ onMounted(async () => {
   background: var(--danger-light);
   color: var(--danger);
   border: 1px solid var(--danger);
+}
+
+.status-live-connected {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
 }
 
 .status-connected {

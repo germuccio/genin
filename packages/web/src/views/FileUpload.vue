@@ -30,7 +30,7 @@
             @change="handlePdfSelect"
             class="form-control"
           />
-          <small class="form-text">You can select multiple PDF files</small>
+          <small class="form-text">You can select multiple PDF files. <strong>Total upload limit: 4MB</strong> (including Excel file)</small>
         </div>
 
         <div v-if="selectedFiles.excel" class="selected-files">
@@ -45,6 +45,10 @@
                 {{ pdf.name }} ({{ formatFileSize(pdf.size) }})
               </li>
             </ul>
+          </div>
+          <div class="size-warning" :class="{ 'size-exceeded': getTotalSize() > 4 * 1024 * 1024 }">
+            <strong>Total size:</strong> {{ formatFileSize(getTotalSize()) }} 
+            <span v-if="getTotalSize() > 4 * 1024 * 1024" class="text-danger">⚠️ Exceeds 4MB limit!</span>
           </div>
         </div>
 
@@ -314,6 +318,18 @@ const handleUpload = async () => {
   uploadResult.value = null
 
   try {
+    // Check total payload size
+    const excelSize = selectedFiles.value.excel.size
+    const totalPdfSize = selectedFiles.value.pdfs.reduce((sum, pdf) => sum + pdf.size, 0)
+    const totalSize = excelSize + totalPdfSize
+    const maxSize = 4 * 1024 * 1024 // 4MB limit for Vercel
+    
+    console.log(`📊 Upload size check: Excel=${(excelSize/1024/1024).toFixed(2)}MB, PDFs=${(totalPdfSize/1024/1024).toFixed(2)}MB, Total=${(totalSize/1024/1024).toFixed(2)}MB`)
+    
+    if (totalSize > maxSize) {
+      throw new Error(`Upload too large: ${(totalSize/1024/1024).toFixed(2)}MB exceeds ${(maxSize/1024/1024).toFixed(2)}MB limit. Please reduce the number of PDF files or use smaller files.`)
+    }
+
     const formData = new FormData()
     formData.append('excel', selectedFiles.value.excel)
     
@@ -511,6 +527,12 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString()
 }
 
+const getTotalSize = () => {
+  const excelSize = selectedFiles.value.excel?.size || 0
+  const pdfSize = selectedFiles.value.pdfs.reduce((sum, pdf) => sum + pdf.size, 0)
+  return excelSize + pdfSize
+}
+
 onMounted(() => {
   loadPersistedUploadResult()
   loadRecentImports()
@@ -597,6 +619,25 @@ onMounted(() => {
   color: #495057;
   margin: 0;
   text-align: center;
+}
+
+.size-warning {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.size-warning.size-exceeded {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  color: #856404;
+}
+
+.text-danger {
+  color: #dc3545;
+  font-weight: bold;
 }
 </style>
 
