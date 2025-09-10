@@ -223,6 +223,37 @@ const recentImports = ref<ImportItem[]>([])
 const isGenerating = ref(false)
 const generationProgress = ref<{ current: number; total: number; message: string } | null>(null)
 
+// Robust error message extractor to avoid "[object Object]" in UI
+const extractErrorMessage = (err: any): string => {
+  try {
+    if (!err) return 'Unknown error';
+    if (typeof err === 'string') return err;
+    // Axios error shape
+    const data = err?.response?.data;
+    if (typeof data === 'string') return data;
+    if (data && typeof data === 'object') {
+      if (typeof data.error === 'string') return data.error;
+      if (data.error && typeof data.error === 'object') {
+        const devMsg = data.error.DeveloperErrorMessage || data.error.message;
+        if (typeof devMsg === 'string') return devMsg;
+        try { return JSON.stringify(data.error); } catch {}
+      }
+      if (typeof data.details === 'string') return data.details;
+      if (data.details && typeof data.details === 'object') {
+        const detailMsg = data.details.message || data.details.error;
+        if (typeof detailMsg === 'string') return detailMsg;
+      }
+      // As a last resort stringify data
+      try { return JSON.stringify(data); } catch {}
+    }
+    if (typeof err.message === 'string') return err.message;
+    try { return JSON.stringify(err); } catch {}
+    return 'Unexpected error';
+  } catch {
+    return 'Unexpected error';
+  }
+}
+
 // Load persisted upload result on component mount
 const loadPersistedUploadResult = () => {
   try {
@@ -317,7 +348,8 @@ const handleUpload = async () => {
     await loadRecentImports()
   } catch (err: any) {
     console.error('Upload failed:', err)
-    error.value = err.response?.data?.error || 'Upload failed'
+    const msg = extractErrorMessage(err) || 'Upload failed'
+    error.value = msg
   } finally {
     isUploading.value = false
   }
@@ -360,97 +392,22 @@ const generateInvoicesDirect = async () => {
       articleMapping,
       customerDefaults,
       customerOverrides,
-      // ALWAYS pass the original import data for Vercel stateless environment
-      // This is more reliable than the processed_invoices response
-      import_data: uploadResult.value?._vercel_import_data,
-      // Keep processed_invoices as fallback for local development
-      processed_invoices: processResp.data.processed_invoices || []
+      // Pass processed invoices for Vercel stateless environment
+      processed_invoices: processResp.data.processed_invoices,
+      // Pass import data as fallback for Vercel stateless environment (only if available)
+      ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data })
     }
-    // Validate data before sending to prevent corruption
-    console.log('🔍 DEBUG: Data validation before transmission:')
-    console.log('- import_data available:', !!requestPayload.import_data)
-    console.log('- import_data.invoices count:', requestPayload.import_data?.invoices?.length || 0)
-    console.log('- processed_invoices type:', typeof requestPayload.processed_invoices)
-    console.log('- processed_invoices count:', Array.isArray(requestPayload.processed_invoices) ? requestPayload.processed_invoices.length : 'NOT_ARRAY')
-    
-    // Ensure we have valid data before sending
-    if (!requestPayload.import_data?.invoices?.length && !Array.isArray(requestPayload.processed_invoices)) {
-      throw new Error('No valid invoice data available for transmission. Please try re-uploading your file.')
-    }
-    
     console.log('🔍 DEBUG: Full request payload:', requestPayload)
     
-    let directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload)
-    console.log('✅ Direct invoice creation response:', directResp.data)
-    
-    // Handle chunked processing for large batches (Vercel timeout workaround)
-    let currentStartIndex = directResp.data?.summary?.processed || 0 // Start with first chunk's processed count
-    let totalRemaining = directResp.data?.summary?.remaining || 0
-    let allResults = directResp.data?.invoice_results || []
-    let allCustomerNotFound = directResp.data?.customer_not_found_invoices || []
-    let totalProcessedCount = currentStartIndex // Track total for display
-    
-    // Continue processing remaining invoices in chunks
-    while (totalRemaining > 0 && totalProcessedCount < 200) { // Safety limit
-      console.log(`🔄 Continuing processing: ${totalRemaining} invoices remaining, next start_index: ${currentStartIndex}`)
-      generationProgress.value = { 
-        current: 3, 
-        total: 4, 
-        message: `Creating invoices in Visma... (${totalProcessedCount} completed, ${totalRemaining} remaining)` 
-      }
-      
-      // Wait a moment before next chunk to avoid overwhelming Vercel
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const continuePayload = {
-        ...requestPayload,
-        start_index: currentStartIndex, // Use proper start index
-        processing_info: directResp.data?.processing_info // Pass processing context
-      }
-      
-      try {
-        directResp = await axios.post('/api/visma/invoices/create-direct', continuePayload)
-        const chunkProcessed = directResp.data?.summary?.processed || 0
-        console.log(`✅ Chunk completed: ${chunkProcessed} more invoices processed`)
-        
-        // Update counters properly
-        currentStartIndex += chunkProcessed // Next chunk starts after this one
-        totalProcessedCount += chunkProcessed // Accumulate total for display
-        totalRemaining = directResp.data?.summary?.remaining || 0
-        allResults = [...allResults, ...(directResp.data?.invoice_results || [])]
-        allCustomerNotFound = [...allCustomerNotFound, ...(directResp.data?.customer_not_found_invoices || [])]
-        
-      } catch (chunkError) {
-        console.error('❌ Error in chunk processing:', chunkError)
-        // Continue with partial results
-        break
-      }
-    }
-    
-    // Update final response with accumulated results
-    directResp.data.invoice_results = allResults
-    directResp.data.customer_not_found_invoices = allCustomerNotFound
-    directResp.data.summary = {
-      ...directResp.data.summary,
-      total_processed: totalProcessedCount,
-      final_remaining: totalRemaining
-    }
+    const directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload)
 
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
-    console.log('✅ All chunks completed:', directResp.data)
+    console.log('✅ Direct invoice creation completed:', directResp.data)
     
     // If there are remaining invoices, persist processing_info for the Invoices page
     const remaining = directResp.data?.summary?.remaining || 0
     if (remaining > 0 && directResp.data?.processing_info) {
       try { localStorage.setItem('processingInfo', JSON.stringify(directResp.data.processing_info)) } catch {}
-    }
-    
-    // Store customer not found invoices for display in invoice list
-    if (directResp.data?.customer_not_found_invoices?.length > 0) {
-      try { 
-        localStorage.setItem('customerNotFoundInvoices', JSON.stringify(directResp.data.customer_not_found_invoices))
-        console.log('🔍 DEBUG: Stored customer not found invoices:', directResp.data.customer_not_found_invoices)
-      } catch {}
     }
     
     // Show success message only when all are completed; avoid blocking alert mid-run
@@ -475,7 +432,7 @@ const generateInvoicesDirect = async () => {
     await loadRecentImports()
   } catch (err: any) {
     console.error('❌ Direct invoice generation failed:', err)
-    const errorMsg = err.response?.data?.error || err.message || 'Direct invoice generation failed'
+    const errorMsg = extractErrorMessage(err) || 'Direct invoice generation failed'
     alert(`❌ Error: ${errorMsg}`)
   } finally {
     isGenerating.value = false
@@ -526,7 +483,7 @@ const processSpecificImport = async (importId: number) => {
     await loadRecentImports()
   } catch (err: any) {
     console.error('Processing failed:', err)
-    error.value = err.response?.data?.error || 'Processing failed'
+    error.value = extractErrorMessage(err) || 'Processing failed'
   }
 }
 
