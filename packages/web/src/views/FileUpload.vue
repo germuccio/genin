@@ -72,14 +72,23 @@
             <br>
             Import ID: {{ uploadResult.import_id }}
           </p>
-          <button 
-            @click="generateInvoicesDirect" 
-            class="btn btn-primary btn-sm"
-            :disabled="isGenerating"
-          >
-            <span v-if="isGenerating">Generating…</span>
-            <span v-else>Generate Invoices</span>
-          </button>
+          <div class="d-flex gap-2">
+            <button 
+              @click="generateInvoicesDirect" 
+              class="btn btn-primary btn-sm"
+              :disabled="isGenerating"
+            >
+              <span v-if="isGenerating">Generating…</span>
+              <span v-else>Generate Invoices</span>
+            </button>
+            <button 
+              @click="clearUploadResult" 
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="isGenerating"
+            >
+              Clear
+            </button>
+          </div>
           
           <!-- Progress Bar -->
           <div v-if="generationProgress" class="progress-container">
@@ -279,6 +288,24 @@ const loadPersistedUploadResult = () => {
   } catch (err) {
     console.warn('Failed to load persisted upload result:', err)
     localStorage.removeItem('lastUploadResult')
+  }
+}
+
+// Clear upload result and related data
+const clearUploadResult = () => {
+  uploadResult.value = null
+  pdfContentMap.value = {}
+  error.value = ''
+  generationProgress.value = null
+  
+  // Clear from localStorage
+  try {
+    localStorage.removeItem('lastUploadResult')
+    localStorage.removeItem('pdfContentMap')
+    localStorage.removeItem('processingInfo')
+    console.log('🧹 Cleared upload result and related data')
+  } catch (err) {
+    console.warn('Failed to clear localStorage:', err)
   }
 }
 
