@@ -318,49 +318,79 @@ const handleUpload = async () => {
   uploadResult.value = null
 
   try {
-    // Check total payload size
-    const excelSize = selectedFiles.value.excel.size
-    const totalPdfSize = selectedFiles.value.pdfs.reduce((sum, pdf) => sum + pdf.size, 0)
-    const totalSize = excelSize + totalPdfSize
-    const maxSize = 4 * 1024 * 1024 // 4MB limit for Vercel
-    
-    console.log(`📊 Upload size check: Excel=${(excelSize/1024/1024).toFixed(2)}MB, PDFs=${(totalPdfSize/1024/1024).toFixed(2)}MB, Total=${(totalSize/1024/1024).toFixed(2)}MB`)
-    
-    if (totalSize > maxSize) {
-      throw new Error(`Upload too large: ${(totalSize/1024/1024).toFixed(2)}MB exceeds ${(maxSize/1024/1024).toFixed(2)}MB limit. Please reduce the number of PDF files or use smaller files.`)
+    const excelFile = selectedFiles.value.excel
+    const pdfFiles = selectedFiles.value.pdfs
+
+    const MAX_REQUEST_BYTES = Math.floor(3.5 * 1024 * 1024) // ~3.5MB per request to stay under Vercel's limit
+    const MULTIPART_OVERHEAD = 100 * 1024 // 100KB safety margin for multipart boundaries/headers
+
+    // Split PDFs into batches under the limit. First batch must reserve space for the Excel file
+    const batches: File[][] = []
+    let currentBatch: File[] = []
+    let currentBatchBytes = 0
+    let firstBatchCapacity = MAX_REQUEST_BYTES - excelFile.size - MULTIPART_OVERHEAD
+    if (firstBatchCapacity < 0) {
+      // Excel alone exceeds our threshold; send Excel only in first batch
+      firstBatchCapacity = 0
     }
 
-    const formData = new FormData()
-    formData.append('excel', selectedFiles.value.excel)
-    
-    selectedFiles.value.pdfs.forEach((pdf, index) => {
-      formData.append('pdf', pdf)
-    })
-
-    const response = await axios.post('/api/upload/files', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
+    pdfFiles.forEach((pdf, idx) => {
+      const pdfSize = pdf.size
+      const limit = batches.length === 0 ? firstBatchCapacity : (MAX_REQUEST_BYTES - MULTIPART_OVERHEAD)
+      if (currentBatchBytes + pdfSize > limit && currentBatch.length > 0) {
+        batches.push(currentBatch)
+        currentBatch = []
+        currentBatchBytes = 0
+      }
+      // If single file larger than remaining capacity, start new batch (it will be sole file in that batch)
+      if (pdfSize > (batches.length === 0 ? firstBatchCapacity : (MAX_REQUEST_BYTES - MULTIPART_OVERHEAD)) && currentBatch.length === 0) {
+        // Force push as its own batch; backend has per-file 10MB limit
+        batches.push([pdf])
+      } else {
+        currentBatch.push(pdf)
+        currentBatchBytes += pdfSize
       }
     })
+    if (currentBatch.length > 0) batches.push(currentBatch)
 
-    // Defensively handle the response to prevent crashes
-    const resultData = response.data;
-    if (resultData && typeof resultData === 'object') {
-      // Ensure the 'errors' property is always an array, even if the API omits it
-      resultData.errors = resultData.errors || [];
-      uploadResult.value = resultData;
-      saveUploadResult(resultData);
-    } else {
-      // Handle cases where the response is not a valid object
-      throw new Error('Received an invalid response from the server.');
+    console.log(`📦 Prepared ${batches.length} upload batch(es)`)
+
+    // 1) Send first batch with Excel + first PDFs chunk (may be empty)
+    const firstForm = new FormData()
+    firstForm.append('excel', excelFile)
+    ;(batches[0] || []).forEach(pdf => firstForm.append('pdf', pdf))
+    const firstResp = await axios.post('/api/upload/files', firstForm, { headers: { 'Content-Type': 'multipart/form-data' } })
+    const firstData = firstResp.data
+    if (!firstData || typeof firstData !== 'object') {
+      throw new Error('Received an invalid response from the server (initial batch).')
     }
-    
+    firstData.errors = firstData.errors || []
+    uploadResult.value = firstData
+    saveUploadResult(firstData)
+
+    const importId = firstData.import_id
+    if (!importId) throw new Error('Server did not return import_id')
+
+    // 2) Send remaining PDF batches with import_id only
+    for (let i = 1; i < batches.length; i++) {
+      const form = new FormData()
+      form.append('import_id', importId)
+      batches[i].forEach(pdf => form.append('pdf', pdf))
+      console.log(`📤 Uploading PDF chunk ${i}/${batches.length - 1} with ${batches[i].length} file(s) ...`)
+      const resp = await axios.post('/api/upload/files', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const data = resp.data
+      if (data && typeof data === 'object') {
+        data.errors = data.errors || []
+        uploadResult.value = data // keep latest snapshot (has merged pdfs)
+        saveUploadResult(data)
+      }
+    }
+
     // Reset form
     selectedFiles.value = { excel: null, pdfs: [] }
     if (excelInput.value) excelInput.value.value = ''
     if (pdfInput.value) pdfInput.value.value = ''
-    
-    // Refresh recent imports
+
     await loadRecentImports()
   } catch (err: any) {
     console.error('Upload failed:', err)

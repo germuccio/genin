@@ -32,9 +32,9 @@ module.exports = async (req, res) => {
     
     // Configure formidable for Vercel environment (v3 syntax)
     const form = new formidable.IncomingForm({
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
+      maxFileSize: 10 * 1024 * 1024, // 10MB per-file limit (overall request is limited by Vercel)
       keepExtensions: true,
-      multiples: false // Single file for now
+      multiples: true // Allow multiple files per request (for PDF batches)
     });
 
     // Parse the multipart form data
@@ -43,14 +43,13 @@ module.exports = async (req, res) => {
     console.log('📁 Files received:', Object.keys(files));
     console.log('📋 Fields received:', Object.keys(fields));
 
-    // Get the uploaded file using the correct field name 'excel'
-    const fileArray = files.excel;
-    if (!fileArray || fileArray.length === 0) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    // Extract optional import_id for PDF chunk uploads
+    const importIdField = Array.isArray(fields.import_id) ? fields.import_id[0] : fields.import_id;
+    const importIdFromFields = importIdField ? String(importIdField) : null;
 
-    const uploadedFile = Array.isArray(fileArray) ? fileArray[0] : fileArray;
-    console.log('📄 Processing file:', uploadedFile.originalFilename);
+    // Detect files
+    const excelFiles = files.excel;
+    const uploadedFile = Array.isArray(excelFiles) ? excelFiles[0] : excelFiles;
     
     // Check if PDFs were uploaded
     const pdfFiles = files.pdf || [];
@@ -63,14 +62,85 @@ module.exports = async (req, res) => {
       })));
     }
 
+    // Branch 1: PDF CHUNK UPLOAD (no Excel file, import_id provided)
+    if (!uploadedFile && importIdFromFields) {
+      if (!global.processedImports[importIdFromFields]) {
+        return res.status(400).json({ error: 'Invalid import_id for PDF chunk upload' });
+      }
+
+      // Append PDFs to existing import record
+      const existing = global.processedImports[importIdFromFields];
+      const processedPdfs = [];
+      if (pdfFiles && (Array.isArray(pdfFiles) ? pdfFiles.length > 0 : pdfFiles)) {
+        const pdfArray = Array.isArray(pdfFiles) ? pdfFiles : [pdfFiles];
+        console.log(`📄 Processing PDF chunk with ${pdfArray.length} files for import ${importIdFromFields}...`);
+        
+        pdfArray.forEach((pdfFile, index) => {
+          try {
+            const pdfId = `pdf_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
+            let pdfContent = null;
+            try {
+              if (pdfFile.filepath) {
+                pdfContent = fs.readFileSync(pdfFile.filepath);
+              } else if (pdfFile.buffer) {
+                pdfContent = pdfFile.buffer;
+              }
+            } catch (err) {
+              console.warn(`⚠️ Could not read PDF content for ${pdfFile.originalFilename}:`, err.message);
+            }
+            const pdfData = {
+              id: pdfId,
+              filename: pdfFile.originalFilename,
+              size: pdfFile.size,
+              mimetype: pdfFile.mimetype,
+              index: (existing.pdfs?.length || 0) + index,
+              content: pdfContent ? pdfContent.toString('base64') : null
+            };
+            processedPdfs.push(pdfData);
+            console.log(`✅ Processed PDF chunk file: ${pdfFile.originalFilename} (${pdfFile.size} bytes)`);
+          } catch (error) {
+            console.error(`❌ Error processing PDF chunk ${pdfFile.originalFilename}:`, error);
+          }
+        });
+      }
+
+      // Merge into existing
+      existing.pdfs = [...(existing.pdfs || []), ...processedPdfs];
+      existing.timestamp = new Date().toISOString();
+
+      // Build response similar to initial upload
+      return res.json({
+        import_id: importIdFromFields,
+        filename: existing.filename,
+        status: 'completed',
+        total_rows: existing.invoices.length,
+        valid_rows: existing.invoices.length,
+        errors: [],
+        pdf_files: existing.pdfs,
+        message: `Added ${processedPdfs.length} PDFs to import ${importIdFromFields}. Total PDFs: ${existing.pdfs.length}`,
+        _vercel_import_data: {
+          invoices: existing.invoices,
+          pdfs: existing.pdfs,
+          timestamp: existing.timestamp,
+          filename: existing.filename,
+          total_count: existing.invoices.length
+        }
+      });
+    }
+
+    // Branch 2: INITIAL UPLOAD (Excel present)
+    if (!uploadedFile) {
+      return res.status(400).json({ error: 'No Excel file uploaded' });
+    }
+
+    console.log('📄 Processing file:', uploadedFile.originalFilename);
+
     // Read the Excel file - try different approaches for different environments
     let fileBuffer;
     try {
-      // First try to read from filepath (local development)
       if (uploadedFile.filepath) {
         fileBuffer = fs.readFileSync(uploadedFile.filepath);
       } else if (uploadedFile.buffer) {
-        // If we have a buffer directly (Vercel)
         fileBuffer = uploadedFile.buffer;
       } else {
         throw new Error('No file data available');
@@ -79,39 +149,35 @@ module.exports = async (req, res) => {
       console.error('❌ Failed to read Excel file:', err.message);
       return res.status(500).json({ error: 'Failed to read uploaded Excel file' });
     }
-    
+
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-    
+
     // Get the first worksheet
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    
+
     // Convert to JSON
     const jsonData = XLSX.utils.sheet_to_json(worksheet);
     console.log(`📊 Parsed ${jsonData.length} rows from Excel`);
     
-    // DEBUG: Log the first row to see what columns are available
     if (jsonData.length > 0) {
       console.log('📊 DEBUG - First row columns:', Object.keys(jsonData[0]));
       console.log('📊 DEBUG - First row data:', jsonData[0]);
     }
 
-    // Process the data (simplified version of your local processing)
     const processedInvoices = jsonData.map((row, index) => {
-      // DEBUG: Log what we're extracting from each row
       const extracted = {
         id: index + 1,
         mottaker: String(row.Mottaker || row.mottaker || '').trim(),
         your_reference: String(row['Your Reference'] || row.your_reference || '').trim(),
-        our_reference: String(row.Referanse || row['Referanse'] || '').trim(), // Fixed: Use actual Excel column name
+        our_reference: String(row.Referanse || row['Referanse'] || '').trim(),
         avsender: String(row.Avsender || row.avsender || '').trim(),
-        status: 'ok', // Default status
-        amount: parseFloat(row['Valutabeløp'] || row.Valutabelop || row.Amount || row.amount || 414), // Use actual Excel amount column
+        status: 'ok',
+        amount: parseFloat(row['Valutabeløp'] || row.Valutabelop || row.Amount || row.amount || 414),
         currency: String(row.Currency || row.currency || 'NOK').trim(),
         raw_data: row
       };
-      
-      if (index < 3) { // Log first 3 rows for debugging
+      if (index < 3) {
         console.log(`📊 DEBUG - Row ${index + 1} extracted:`, {
           mottaker: extracted.mottaker,
           our_reference: extracted.our_reference,
@@ -119,9 +185,8 @@ module.exports = async (req, res) => {
           avsender: extracted.avsender
         });
       }
-      
       return extracted;
-    }).filter(invoice => invoice.mottaker); // Filter out empty rows
+    }).filter(invoice => invoice.mottaker);
 
     // Generate import ID
     const import_id = Date.now().toString();
@@ -184,7 +249,9 @@ module.exports = async (req, res) => {
 
     // Clean up temporary file
     try {
-      fs.unlinkSync(uploadedFile.filepath);
+      if (uploadedFile.filepath) {
+        fs.unlinkSync(uploadedFile.filepath);
+      }
     } catch (err) {
       console.warn('Could not clean up temp file:', err.message);
     }
