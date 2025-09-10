@@ -630,6 +630,35 @@ const getTotalSize = () => {
   return excelSize + pdfSize
 }
 
+// Build a minimal pdf content map for the current chunk to avoid 413 errors
+const buildChunkPdfMap = (startIndex: number, chunkSize: number) => {
+  try {
+    const importData: any = (uploadResult.value as any)?._vercel_import_data
+    if (!importData || !Array.isArray(importData.invoices)) return {}
+    const endIndex = Math.min(startIndex + chunkSize, importData.invoices.length)
+    const codes = new Set<string>()
+    for (let i = startIndex; i < endIndex; i++) {
+      const inv = importData.invoices[i]
+      const code = inv?.raw_data?.['Linjedekl. nr.'] || inv?.raw_data?.['Line Declaration Nr'] || null
+      if (code) codes.add(String(code))
+    }
+    const sourceMap = Object.keys(pdfContentMap.value).length > 0
+      ? pdfContentMap.value
+      : (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
+    if (!codes.size || !sourceMap) return {}
+    const subset: Record<string, string> = {}
+    for (const filename of Object.keys(sourceMap)) {
+      for (const code of Array.from(codes)) {
+        if (filename.includes(code)) {
+          subset[filename] = sourceMap[filename]
+          break
+        }
+      }
+    }
+    return subset
+  } catch { return {} }
+}
+
 onMounted(() => {
   loadPersistedUploadResult()
   loadRecentImports()

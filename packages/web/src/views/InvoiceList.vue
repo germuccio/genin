@@ -576,6 +576,36 @@ const continueProcessing = async () => {
 
     // Create the continue processing request
     const pdfContentMap2 = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
+    // Build a subset map for this chunk based on likely matching codes
+    const buildSubsetForChunk = () => {
+      try {
+        const saved = localStorage.getItem('lastUploadResult')
+        if (!saved) return pdfContentMap2
+        const parsed = JSON.parse(saved)
+        const importData = parsed.data?._vercel_import_data
+        if (!importData?.invoices) return pdfContentMap2
+        const start = processingInfo.value.next_start_index || 0
+        const chunkSize = 5
+        const end = Math.min(start + chunkSize, importData.invoices.length)
+        const codes = new Set<string>()
+        for (let i = start; i < end; i++) {
+          const inv = importData.invoices[i]
+          const code = inv?.raw_data?.['Linjedekl. nr.'] || inv?.raw_data?.['Line Declaration Nr']
+          if (code) codes.add(String(code))
+        }
+        if (!codes.size) return pdfContentMap2
+        const subset: Record<string, string> = {}
+        for (const name of Object.keys(pdfContentMap2 as any)) {
+          for (const code of Array.from(codes)) {
+            if (name.includes(code as string)) {
+              subset[name] = (pdfContentMap2 as any)[name]
+              break
+            }
+          }
+        }
+        return Object.keys(subset).length ? subset : pdfContentMap2
+      } catch { return pdfContentMap2 }
+    }
 
     const continueRequest = {
       start_index: processingInfo.value.next_start_index,
@@ -587,7 +617,7 @@ const continueProcessing = async () => {
       // Provide data again in case server had a cold start
       processed_invoices: processedInvoices,
       ...(importData && { import_data: importData }),
-      ...((pdfContentMap2 && Object.keys(pdfContentMap2).length > 0) ? { pdf_content_map: pdfContentMap2 } : {})
+      ...((pdfContentMap2 && Object.keys(pdfContentMap2).length > 0) ? { pdf_content_map: buildSubsetForChunk() } : {})
     }
 
     const response = await axios.post('/api/visma/invoices/create-direct', continueRequest)
