@@ -493,41 +493,74 @@ const generateInvoicesDirect = async () => {
     console.log('🔍 DEBUG: processResp.data.processed_invoices:', processResp.data.processed_invoices)
     console.log('🔍 DEBUG: uploadResult.value?._vercel_import_data:', uploadResult.value?._vercel_import_data)
 
-    generationProgress.value = { current: 3, total: 4, message: 'Creating invoices in Visma...' }
-    const requestPayload = {
-      import_id: uploadResult.value?.import_id,
-      articleMapping,
-      customerDefaults,
-      customerOverrides,
-      // Pass processed invoices for Vercel stateless environment
-      processed_invoices: processResp.data.processed_invoices,
-      // Pass import data as fallback for Vercel stateless environment (only if available)
-      ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data }),
-      // Prefer in-memory accumulated pdf content map; fallback to localStorage if empty
-      ...((Object.keys(pdfContentMap.value).length > 0) 
-          ? { pdf_content_map: pdfContentMap.value }
-          : (localStorage.getItem('pdfContentMap') 
-              ? { pdf_content_map: (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })() } 
-              : {}))
-    }
-    console.log('🔍 DEBUG: Full request payload:', requestPayload)
+    // Get PDF content map for attachments
+    const fullPdfContentMap = Object.keys(pdfContentMap.value).length > 0 
+      ? pdfContentMap.value
+      : (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
+
+    // Process invoices in chunks to avoid 413 errors
+    const allInvoices = processResp.data.processed_invoices
+    const chunkSize = 5
+    let totalSuccessful = 0
+    let totalFailed = 0
+    let lastProcessingInfo = null
     
-    const directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload)
+    for (let startIndex = 0; startIndex < allInvoices.length; startIndex += chunkSize) {
+      const endIndex = Math.min(startIndex + chunkSize, allInvoices.length)
+      const chunk = allInvoices.slice(startIndex, endIndex)
+      
+      // Build subset PDF map for this chunk
+      const chunkPdfMap = buildChunkPdfMap(startIndex, chunk.length)
+
+      generationProgress.value = { 
+        current: 3, 
+        total: 4, 
+        message: `Creating invoices ${startIndex + 1}-${endIndex} of ${allInvoices.length} in Visma...` 
+      }
+
+      console.log(`🔄 Processing chunk ${Math.floor(startIndex/chunkSize) + 1}/${Math.ceil(allInvoices.length/chunkSize)} with ${chunk.length} invoices`)
+
+      const requestPayload = {
+        import_id: uploadResult.value?.import_id,
+        articleMapping,
+        customerDefaults,
+        customerOverrides,
+        processed_invoices: chunk,
+        pdf_content_map: chunkPdfMap,
+        start_index: startIndex,
+        // Pass import data as fallback for Vercel stateless environment (only if available)
+        ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data })
+      }
+      console.log('🔍 DEBUG: Chunk request payload size:', JSON.stringify(requestPayload).length, 'chars')
+      
+      const directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload)
+
+      totalSuccessful += directResp.data.summary?.successful || 0
+      totalFailed += directResp.data.summary?.failed || 0
+      lastProcessingInfo = directResp.data?.processing_info
+      
+      const remaining = allInvoices.length - endIndex
+      if (remaining > 0) {
+        console.log(`✅ Processed ${chunk.length}. ${remaining} remaining...`)
+        // Brief pause between chunks to avoid overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
 
     generationProgress.value = { current: 4, total: 4, message: 'Completed!' }
-    console.log('✅ Direct invoice creation completed:', directResp.data)
+    console.log('✅ Direct invoice creation completed. Total successful:', totalSuccessful, 'failed:', totalFailed)
     
     // If there are remaining invoices, persist processing_info for the Invoices page
-    const remaining = directResp.data?.summary?.remaining || 0
-    if (remaining > 0 && directResp.data?.processing_info) {
-      try { localStorage.setItem('processingInfo', JSON.stringify(directResp.data.processing_info)) } catch {}
+    const remaining = allInvoices.length - totalSuccessful - totalFailed
+    if (remaining > 0 && lastProcessingInfo) {
+      try { localStorage.setItem('processingInfo', JSON.stringify(lastProcessingInfo)) } catch {}
     }
     
     // Show success message only when all are completed; avoid blocking alert mid-run
     if (remaining === 0) {
-      alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
+      alert(`✅ Success! Created ${totalSuccessful} invoice drafts directly with PDF attachments. ${totalFailed} failed.`)
     } else {
-      console.info(`✅ Created ${directResp.data.summary.successful}. ${directResp.data.summary.failed} failed. ${remaining} remaining… auto-continuing on Invoices page.`)
+      console.info(`✅ Created ${totalSuccessful}. ${totalFailed} failed. ${remaining} remaining… auto-continuing on Invoices page.`)
     }
     
     // Clear the upload result state in memory; keep persisted data until completion
@@ -564,7 +597,7 @@ const processSpecificImport = async (importId: number) => {
       import_data: uploadResult.value?._vercel_import_data
     })
 
-    // 2) Create invoice drafts directly in Visma with PDF attachments
+    // 2) Get settings for invoice creation
     const articleMapping = (() => {
       try { return JSON.parse(localStorage.getItem('articleMapping') || '{}') } catch { return {} }
     })()
@@ -576,18 +609,67 @@ const processSpecificImport = async (importId: number) => {
       try { return JSON.parse(localStorage.getItem('customerOverrides') || '{}') } catch { return {} }
     })()
 
-    const directResp = await axios.post('/api/visma/invoices/create-direct', {
-      import_id: importId,
-      articleMapping,
-      customerDefaults,
-      customerOverrides,
-      // Pass processed invoices for Vercel stateless environment
-      processed_invoices: processResp.data.processed_invoices,
-      // Note: processSpecificImport doesn't have access to uploadResult, so we can't pass import_data
-      // This will work with the backend fallback logic
-    })
+    // 3) Get PDF content map for attachments
+    const pdfContentMap = (() => { 
+      try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } 
+    })()
 
-    alert(`✅ Success! Created ${directResp.data.summary.successful} invoice drafts directly with PDF attachments. ${directResp.data.summary.failed} failed.`)
+    // 4) Process invoices in chunks to avoid 413 errors
+    const allInvoices = processResp.data.processed_invoices
+    const chunkSize = 5
+    let totalSuccessful = 0
+    let totalFailed = 0
+    
+    for (let startIndex = 0; startIndex < allInvoices.length; startIndex += chunkSize) {
+      const endIndex = Math.min(startIndex + chunkSize, allInvoices.length)
+      const chunk = allInvoices.slice(startIndex, endIndex)
+      
+      // Build subset PDF map for this chunk
+      const chunkPdfMap = (() => {
+        try {
+          const codes = new Set<string>()
+          for (const inv of chunk) {
+            const code = inv?.raw_data?.['Linjedekl. nr.'] || inv?.raw_data?.['Line Declaration Nr']
+            if (code) codes.add(String(code))
+          }
+          if (!codes.size || !pdfContentMap) return {}
+          const subset: Record<string, string> = {}
+          for (const filename of Object.keys(pdfContentMap)) {
+            for (const code of Array.from(codes)) {
+              if (filename.includes(code)) {
+                subset[filename] = pdfContentMap[filename]
+                break
+              }
+            }
+          }
+          return subset
+        } catch { return {} }
+      })()
+
+      console.log(`🔄 Processing chunk ${Math.floor(startIndex/chunkSize) + 1}/${Math.ceil(allInvoices.length/chunkSize)} with ${chunk.length} invoices`)
+
+      const directResp = await axios.post('/api/visma/invoices/create-direct', {
+        import_id: importId,
+        articleMapping,
+        customerDefaults,
+        customerOverrides,
+        processed_invoices: chunk,
+        pdf_content_map: chunkPdfMap,
+        start_index: startIndex
+      })
+
+      totalSuccessful += directResp.data.summary?.successful || 0
+      totalFailed += directResp.data.summary?.failed || 0
+      
+      const remaining = allInvoices.length - endIndex
+      if (remaining > 0) {
+        console.log(`✅ Processed ${chunk.length}. ${remaining} remaining...`)
+        // Brief pause between chunks to avoid overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
+
+    alert(`✅ Success! Created ${totalSuccessful} invoice drafts directly with PDF attachments. ${totalFailed} failed.`)
     
     // Clear any persisted upload result since processing is complete
     uploadResult.value = null
