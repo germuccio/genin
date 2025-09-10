@@ -126,6 +126,7 @@ module.exports = async (req, res) => {
           const processingResults = global.lastProcessingResults || {};
           console.log(`📋 DEBUG: Processing results available:`, Object.keys(processingResults).length, 'entries');
           console.log(`📋 DEBUG: Processing results:`, processingResults);
+          console.log(`📋 DEBUG: Global lastProcessingResults:`, global.lastProcessingResults);
           
           // Map Visma drafts with enhanced status
           const vismaInvoices = drafts.map(draft => {
@@ -156,24 +157,28 @@ module.exports = async (req, res) => {
           });
           
           // Add any customer not found invoices that didn't make it to Visma
-          const customerNotFoundInvoices = Object.values(processingResults)
-            .filter(result => result.status === 'CUSTOMER_NOT_FOUND')
-            .map(result => ({
-              id: `not-found-${result.referanse}`,
-              referanse: result.referanse,
-              your_reference: result.referanse,
-              mottaker: result.mottaker,
-              avsender: 'Genin',
-              status: 'CUSTOMER_NOT_FOUND',
-              total_cents: Math.round((result.amount || 0) * 100),
-              unit_price: result.amount || 0,
-              currency: 'NOK',
-              created_at: new Date().toISOString(),
-              visma_invoice_id: null,
-              filename: result.filename || 'Unknown',
-              import_id: result.referanse || 'unknown',
-              customer_validation_status: 'NOT_FOUND'
-            }));
+          const allProcessingResults = Object.values(processingResults);
+          console.log(`📋 DEBUG: All processing results:`, allProcessingResults);
+          
+          const customerNotFoundResults = allProcessingResults.filter(result => result.status === 'CUSTOMER_NOT_FOUND');
+          console.log(`📋 DEBUG: Customer not found results:`, customerNotFoundResults);
+          
+          const customerNotFoundInvoices = customerNotFoundResults.map(result => ({
+            id: `not-found-${result.referanse}`,
+            referanse: result.referanse,
+            your_reference: result.referanse,
+            mottaker: result.mottaker,
+            avsender: 'Genin',
+            status: 'CUSTOMER_NOT_FOUND',
+            total_cents: Math.round((result.amount || 0) * 100),
+            unit_price: result.amount || 0,
+            currency: 'NOK',
+            created_at: new Date().toISOString(),
+            visma_invoice_id: null,
+            filename: result.filename || 'Unknown',
+            import_id: result.referanse || 'unknown',
+            customer_validation_status: 'NOT_FOUND'
+          }));
           
           console.log(`📋 DEBUG: Found ${customerNotFoundInvoices.length} customer not found invoices`);
           customerNotFoundInvoices.forEach(invoice => {
