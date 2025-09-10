@@ -434,6 +434,9 @@ const createInvoicesInVisma = async () => {
       }
     }
 
+    // Load pdf content map if available (for attachments)
+    const pdfContentMap = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
+
     const requestData = {
       import_id: import_id,
       articleMapping: articleMapping,
@@ -442,7 +445,9 @@ const createInvoicesInVisma = async () => {
       // Pass processed invoices for Vercel stateless environment
       processed_invoices: processedInvoices,
       // Pass import data as fallback for Vercel stateless environment
-      ...(importData && { import_data: importData })
+      ...(importData && { import_data: importData }),
+      // Provide pdf content map if present
+      ...((pdfContentMap && Object.keys(pdfContentMap).length > 0) ? { pdf_content_map: pdfContentMap } : {})
     }
 
     const response = await axios.post('/api/visma/invoices/create-direct', requestData)
@@ -570,6 +575,8 @@ const continueProcessing = async () => {
     } catch {}
 
     // Create the continue processing request
+    const pdfContentMap2 = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
+
     const continueRequest = {
       start_index: processingInfo.value.next_start_index,
       import_id: processingInfo.value.import_id || Date.now().toString(), // Use stored import_id
@@ -579,7 +586,8 @@ const continueProcessing = async () => {
       customerOverrides: perCustomerOverrides.value,
       // Provide data again in case server had a cold start
       processed_invoices: processedInvoices,
-      ...(importData && { import_data: importData })
+      ...(importData && { import_data: importData }),
+      ...((pdfContentMap2 && Object.keys(pdfContentMap2).length > 0) ? { pdf_content_map: pdfContentMap2 } : {})
     }
 
     const response = await axios.post('/api/visma/invoices/create-direct', continueRequest)
