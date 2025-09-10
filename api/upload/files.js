@@ -141,6 +141,11 @@ module.exports = async (req, res) => {
       }
 
       // Build response similar to initial upload
+      // Also include a minimal pdf_content_map for this chunk to help immediate attachment
+      const contentMap = Object.fromEntries(processedPdfs
+        .filter(p => !!p.content)
+        .map(p => [p.filename, p.content]));
+      
       return res.json({
         import_id: importIdFromFields,
         filename: existing.filename,
@@ -150,6 +155,7 @@ module.exports = async (req, res) => {
         errors: [],
         pdf_files: existing.pdfs.map(({ content, ...rest }) => rest),
         message: `Added ${processedPdfs.length} PDFs to import ${importIdFromFields}. Total PDFs: ${existing.pdfs.length}`,
+        pdf_content_map: contentMap,
         _vercel_import_data: {
           invoices: existing.invoices,
           pdfs: existing.pdfs.map(({ content, ...rest }) => rest),

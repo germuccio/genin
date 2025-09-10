@@ -61,14 +61,15 @@ module.exports = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
     
-    const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices, import_data } = req.body;
+    const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices, import_data, pdf_content_map } = req.body;
     console.log('📍 Parsed request data:', { 
       import_id, 
       articleMapping, 
       customerDefaults, 
       customerOverrides, 
       processed_invoices: processed_invoices ? `${processed_invoices.length} invoices` : 'none',
-      import_data: import_data ? `Available with ${import_data.invoices?.length || 0} invoices` : 'none'
+      import_data: import_data ? `Available with ${import_data.invoices?.length || 0} invoices` : 'none',
+      pdf_content_map_keys: pdf_content_map ? Object.keys(pdf_content_map).length : 0
     });
     
     // Work with a mutable copy for fallbacks below
@@ -509,7 +510,13 @@ module.exports = async (req, res) => {
                 
                 console.log(`[${invoice.referanse}] PDF to attach:`, pdfToAttach ? `${pdfToAttach.filename} (${pdfToAttach.size} bytes)` : 'none');
                 
-                // If no inline content (because of chunked, metadata-only uploads), try to recover from global store by import_id
+                // If no inline content (because of chunked, metadata-only uploads), try to recover from provided pdf_content_map first
+                if (pdfToAttach && !pdfToAttach.content && pdf_content_map && pdf_content_map[pdfToAttach.filename]) {
+                  pdfToAttach = { ...pdfToAttach, content: pdf_content_map[pdfToAttach.filename] };
+                  console.log(`[${invoice.referanse}] Recovered PDF content from request map for ${pdfToAttach.filename}`);
+                }
+
+                // If still no content, try to recover from global store by import_id
                 if (pdfToAttach && !pdfToAttach.content && import_id && global.processedImports && global.processedImports[import_id]) {
                   try {
                     const stored = global.processedImports[import_id];

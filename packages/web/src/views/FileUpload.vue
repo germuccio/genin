@@ -413,7 +413,7 @@ const handleUpload = async () => {
       total_count: firstData?._vercel_import_data?.total_count
     }
 
-    // 2) Send remaining PDF batches with import_id and import_data
+    // 2) Send remaining PDF batches with import_id and import_data, and pass content map
     for (let i = 1; i < batches.length; i++) {
       const form = new FormData()
       form.append('import_id', importId)
@@ -426,6 +426,8 @@ const handleUpload = async () => {
         data.errors = data.errors || []
         uploadResult.value = data // keep latest snapshot (has merged pdfs)
         saveUploadResult(data)
+        // Store latest content map for immediate next step usage
+        try { localStorage.setItem('pdfContentMap', JSON.stringify(data.pdf_content_map || {})) } catch {}
       }
     }
 
@@ -484,7 +486,9 @@ const generateInvoicesDirect = async () => {
       // Pass processed invoices for Vercel stateless environment
       processed_invoices: processResp.data.processed_invoices,
       // Pass import data as fallback for Vercel stateless environment (only if available)
-      ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data })
+      ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data }),
+      // Pass any cached pdf content map from the last chunk upload (best-effort)
+      ...(localStorage.getItem('pdfContentMap') ? { pdf_content_map: (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })() } : {})
     }
     console.log('🔍 DEBUG: Full request payload:', requestPayload)
     
