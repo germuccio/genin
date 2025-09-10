@@ -226,6 +226,8 @@ const error = ref('')
 const recentImports = ref<ImportItem[]>([])
 const isGenerating = ref(false)
 const generationProgress = ref<{ current: number; total: number; message: string } | null>(null)
+// Accumulates filename->base64 content across chunks (avoid localStorage quota)
+const pdfContentMap = ref<Record<string, string>>({})
 
 // Robust error message extractor to avoid "[object Object]" in UI
 const extractErrorMessage = (err: any): string => {
@@ -349,6 +351,7 @@ const handleUpload = async () => {
   isUploading.value = true
   error.value = ''
   uploadResult.value = null
+  pdfContentMap.value = {}
 
   try {
     const excelFile = selectedFiles.value.excel
@@ -400,7 +403,9 @@ const handleUpload = async () => {
     firstData.errors = firstData.errors || []
     uploadResult.value = firstData
     saveUploadResult(firstData)
-    // Save content map from first response too
+    // Merge content map from first response
+    try { Object.assign(pdfContentMap.value, firstData.pdf_content_map || {}) } catch {}
+    // Best-effort persist (may be skipped due to quota)
     try {
       const existingMap = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
       const merged = { ...existingMap, ...(firstData.pdf_content_map || {}) }
@@ -432,7 +437,8 @@ const handleUpload = async () => {
         data.errors = data.errors || []
         uploadResult.value = data // keep latest snapshot (has merged pdfs)
         saveUploadResult(data)
-        // Store latest content map for immediate next step usage
+        // Merge content map in-memory and best-effort persist
+        try { Object.assign(pdfContentMap.value, data.pdf_content_map || {}) } catch {}
         try {
           const existingMap2 = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
           const merged2 = { ...existingMap2, ...(data.pdf_content_map || {}) }
@@ -497,8 +503,12 @@ const generateInvoicesDirect = async () => {
       processed_invoices: processResp.data.processed_invoices,
       // Pass import data as fallback for Vercel stateless environment (only if available)
       ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data }),
-      // Pass any cached pdf content map from the last chunk upload (best-effort)
-      ...(localStorage.getItem('pdfContentMap') ? { pdf_content_map: (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })() } : {})
+      // Prefer in-memory accumulated pdf content map; fallback to localStorage if empty
+      ...((Object.keys(pdfContentMap.value).length > 0) 
+          ? { pdf_content_map: pdfContentMap.value }
+          : (localStorage.getItem('pdfContentMap') 
+              ? { pdf_content_map: (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })() } 
+              : {}))
     }
     console.log('🔍 DEBUG: Full request payload:', requestPayload)
     
