@@ -41,6 +41,41 @@ module.exports = async (req, res) => {
     // Convert the uploaded data to invoice format
     let processed = 0;
     const errors = [];
+    
+    // Diagnostic: Show available PDFs vs expected Line Declaration numbers
+    console.log(`📊 DIAGNOSTIC - Available PDFs (${importData.pdfs?.length || 0}):`, 
+      importData.pdfs?.map(p => p.filename).slice(0, 10).join(', ') + '...');
+    
+    const expectedLineDeclarations = importData.invoices
+      .filter(inv => (inv.raw_data?.['s.NO'] || inv.raw_data?.Status || 'OK') === 'OK')
+      .map(inv => {
+        let lineDecl = inv.raw_data?.['Linjedekl. nr.'] || inv.raw_data?.['Line Declaration Nr'];
+        if (lineDecl && typeof lineDecl === 'number') {
+          lineDecl = lineDecl.toFixed(0);
+        } else if (lineDecl && typeof lineDecl === 'string' && lineDecl.includes('E')) {
+          try {
+            const numberValue = parseFloat(lineDecl);
+            lineDecl = numberValue.toFixed(0);
+          } catch (e) {
+            // Keep original if conversion fails
+          }
+        }
+        return lineDecl;
+      })
+      .filter(Boolean);
+    
+    console.log(`📊 DIAGNOSTIC - Expected Line Declaration numbers (${expectedLineDeclarations.length}):`, 
+      expectedLineDeclarations.slice(0, 10).join(', ') + '...');
+    
+    // Find missing PDFs
+    const availablePdfNumbers = new Set(
+      (importData.pdfs || []).map(pdf => pdf.filename.replace('.pdf', ''))
+    );
+    const missingPdfs = expectedLineDeclarations.filter(lineDecl => !availablePdfNumbers.has(lineDecl));
+    
+    if (missingPdfs.length > 0) {
+      console.log(`⚠️ MISSING PDFs (${missingPdfs.length}):`, missingPdfs.slice(0, 10).join(', ') + (missingPdfs.length > 10 ? '...' : ''));
+    }
 
     importData.invoices.forEach((uploadedInvoice, index) => {
       try {
@@ -96,9 +131,23 @@ module.exports = async (req, res) => {
             }
           }
           // Last resort: try by index (original logic) - but only if no other invoice has claimed this PDF
+          // AND only if we haven't exceeded the available PDFs (to prevent wrong assignments)
           if (!matchedPdf && importData.pdfs[index] && !importData.pdfs[index]._claimed) {
-            matchedPdf = importData.pdfs[index];
-            console.log(`📎 Matched PDF by index (${index}): ${matchedPdf.filename} for invoice ${referanse}`);
+            // Additional safety: only use index matching if the PDF filename doesn't seem to belong to another invoice
+            const pdfFilename = importData.pdfs[index].filename.replace('.pdf', '');
+            const seemsToMatchOtherInvoice = expectedLineDeclarations.includes(pdfFilename) && pdfFilename !== String(lineDeclarationNr);
+            
+            if (!seemsToMatchOtherInvoice) {
+              matchedPdf = importData.pdfs[index];
+              console.log(`📎 Matched PDF by index (${index}): ${matchedPdf.filename} for invoice ${referanse}`);
+            } else {
+              console.log(`📎 Skipped index matching for ${importData.pdfs[index].filename} - seems to belong to another invoice with Line Declaration Nr ${pdfFilename}`);
+            }
+          }
+          
+          // Final fallback: if still no match and PDF is missing, log it clearly
+          if (!matchedPdf && lineDeclarationNr) {
+            console.log(`❌ PDF MISSING: No PDF found for Line Declaration Nr ${lineDeclarationNr} (invoice ${referanse})`);
           }
           
           // Mark PDF as claimed to prevent double-assignment
