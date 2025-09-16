@@ -53,6 +53,38 @@ module.exports = async (req, res) => {
         }
 
         // Create invoice in the format expected by create-direct endpoint
+        const referanse = uploadedInvoice.our_reference || `REF-${Date.now()}-${index}`;
+        
+        // Try to match PDF by filename containing the line declaration number or invoice reference
+        let matchedPdf = null;
+        if (importData.pdfs && Array.isArray(importData.pdfs)) {
+          // First try to match by "Linjedekl. nr." from Excel (this should match PDF filename)
+          const lineDeclarationNr = uploadedInvoice.raw_data?.['Linjedekl. nr.'] || uploadedInvoice.raw_data?.['Line Declaration Nr'];
+          if (lineDeclarationNr) {
+            matchedPdf = importData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(lineDeclarationNr));
+            if (matchedPdf) {
+              console.log(`📎 Matched PDF by Line Declaration Nr (${lineDeclarationNr}): ${matchedPdf.filename} for invoice ${referanse}`);
+            }
+          }
+          // Fallback: try to match by invoice reference
+          if (!matchedPdf) {
+            matchedPdf = importData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(referanse));
+            if (matchedPdf) {
+              console.log(`📎 Matched PDF by reference (${referanse}): ${matchedPdf.filename} for invoice ${referanse}`);
+            }
+          }
+          // Last resort: try by index (original logic) - but only if no other invoice has claimed this PDF
+          if (!matchedPdf && importData.pdfs[index] && !importData.pdfs[index]._claimed) {
+            matchedPdf = importData.pdfs[index];
+            console.log(`📎 Matched PDF by index (${index}): ${matchedPdf.filename} for invoice ${referanse}`);
+          }
+          
+          // Mark PDF as claimed to prevent double-assignment
+          if (matchedPdf) {
+            matchedPdf._claimed = true;
+          }
+        }
+
         const invoice = {
           id: global.invoices.length + 1,
           import_id: parseInt(import_id),
@@ -64,7 +96,7 @@ module.exports = async (req, res) => {
           created_at: new Date().toISOString(),
           
           // Business fields
-          referanse: uploadedInvoice.our_reference || `REF-${Date.now()}-${index}`,
+          referanse: referanse,
           your_reference: uploadedInvoice.your_reference,
           avsender: uploadedInvoice.avsender,
           mottaker: uploadedInvoice.mottaker,
@@ -72,8 +104,13 @@ module.exports = async (req, res) => {
           currency: uploadedInvoice.currency || 'NOK',
           service_description: 'Transport service',
           
-          // PDF attachment info (placeholder - PDFs not handled in Vercel yet)
-          declaration_pdf: importData.pdfs && importData.pdfs[index] ? { filename: importData.pdfs[index].filename, size: importData.pdfs[index].size, mimetype: importData.pdfs[index].mimetype, index: importData.pdfs[index].index } : null,
+          // PDF attachment info with proper matching logic
+          declaration_pdf: matchedPdf ? { 
+            filename: matchedPdf.filename, 
+            size: matchedPdf.size, 
+            mimetype: matchedPdf.mimetype, 
+            index: matchedPdf.index 
+          } : null,
           
           filename: importData.filename,
           row_data: uploadedInvoice.raw_data
