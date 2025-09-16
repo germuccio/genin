@@ -188,14 +188,22 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'Failed to read uploaded Excel file' });
     }
 
-    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+    const workbook = XLSX.read(fileBuffer, { 
+      type: 'buffer',
+      cellText: false,  // Don't use cell text format
+      cellNF: false,    // Don't use cell number format
+      cellDates: false  // Don't parse dates automatically
+    });
 
     // Get the first worksheet
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
-    // Convert to JSON
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    // Convert to JSON with raw values to prevent scientific notation
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      raw: true,        // Use raw values instead of formatted values
+      defval: null      // Use null for empty cells instead of undefined
+    });
     console.log(`📊 Parsed ${jsonData.length} rows from Excel`);
     
     if (jsonData.length > 0) {

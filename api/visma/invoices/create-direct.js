@@ -98,9 +98,22 @@ module.exports = async (req, res) => {
           let matchedPdf = null;
           if (importDataLocal.pdfs && Array.isArray(importDataLocal.pdfs)) {
             // First try to match by "Linjedekl. nr." from Excel (this should match PDF filename)
-            const lineDeclarationNr = invoice.raw_data?.['Linjedekl. nr.'] || invoice.raw_data?.['Line Declaration Nr'];
+            let lineDeclarationNr = invoice.raw_data?.['Linjedekl. nr.'] || invoice.raw_data?.['Line Declaration Nr'];
+            
+            // Handle scientific notation: convert to full number string if needed
+            if (lineDeclarationNr && typeof lineDeclarationNr === 'number') {
+              lineDeclarationNr = lineDeclarationNr.toFixed(0);
+            } else if (lineDeclarationNr && typeof lineDeclarationNr === 'string' && lineDeclarationNr.includes('E')) {
+              try {
+                const numberValue = parseFloat(lineDeclarationNr);
+                lineDeclarationNr = numberValue.toFixed(0);
+              } catch (e) {
+                console.warn(`⚠️ Failed to convert scientific notation: ${lineDeclarationNr}`);
+              }
+            }
+            
             if (lineDeclarationNr) {
-              matchedPdf = importDataLocal.pdfs.find(pdf => pdf.filename && pdf.filename.includes(lineDeclarationNr));
+              matchedPdf = importDataLocal.pdfs.find(pdf => pdf.filename && pdf.filename.includes(String(lineDeclarationNr)));
             }
             // Fallback: try to match by invoice reference
             if (!matchedPdf) {
@@ -147,9 +160,22 @@ module.exports = async (req, res) => {
           let matchedPdf = null;
           if (storedData.pdfs && Array.isArray(storedData.pdfs)) {
             // First try to match by "Linjedekl. nr." from Excel (this should match PDF filename)
-            const lineDeclarationNr = invoice.raw_data?.['Linjedekl. nr.'] || invoice.raw_data?.['Line Declaration Nr'];
+            let lineDeclarationNr = invoice.raw_data?.['Linjedekl. nr.'] || invoice.raw_data?.['Line Declaration Nr'];
+            
+            // Handle scientific notation: convert to full number string if needed
+            if (lineDeclarationNr && typeof lineDeclarationNr === 'number') {
+              lineDeclarationNr = lineDeclarationNr.toFixed(0);
+            } else if (lineDeclarationNr && typeof lineDeclarationNr === 'string' && lineDeclarationNr.includes('E')) {
+              try {
+                const numberValue = parseFloat(lineDeclarationNr);
+                lineDeclarationNr = numberValue.toFixed(0);
+              } catch (e) {
+                console.warn(`⚠️ Failed to convert scientific notation: ${lineDeclarationNr}`);
+              }
+            }
+            
             if (lineDeclarationNr) {
-              matchedPdf = storedData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(lineDeclarationNr));
+              matchedPdf = storedData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(String(lineDeclarationNr)));
             }
             // Fallback: try to match by invoice reference
             if (!matchedPdf) {

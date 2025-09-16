@@ -59,11 +59,33 @@ module.exports = async (req, res) => {
         let matchedPdf = null;
         if (importData.pdfs && Array.isArray(importData.pdfs)) {
           // First try to match by "Linjedekl. nr." from Excel (this should match PDF filename)
-          const lineDeclarationNr = uploadedInvoice.raw_data?.['Linjedekl. nr.'] || uploadedInvoice.raw_data?.['Line Declaration Nr'];
+          let lineDeclarationNr = uploadedInvoice.raw_data?.['Linjedekl. nr.'] || uploadedInvoice.raw_data?.['Line Declaration Nr'];
+          
+          // Handle scientific notation: convert to full number string if needed
+          if (lineDeclarationNr && typeof lineDeclarationNr === 'number') {
+            // Convert scientific notation to full number string
+            lineDeclarationNr = lineDeclarationNr.toFixed(0);
+            console.log(`📊 Converted scientific notation to full number: ${lineDeclarationNr} for invoice ${referanse}`);
+          } else if (lineDeclarationNr && typeof lineDeclarationNr === 'string' && lineDeclarationNr.includes('E')) {
+            // Handle string scientific notation like "3.71001E+15"
+            try {
+              const numberValue = parseFloat(lineDeclarationNr);
+              lineDeclarationNr = numberValue.toFixed(0);
+              console.log(`📊 Converted string scientific notation to full number: ${lineDeclarationNr} for invoice ${referanse}`);
+            } catch (e) {
+              console.warn(`⚠️ Failed to convert scientific notation: ${lineDeclarationNr} for invoice ${referanse}`);
+            }
+          }
+          
+          console.log(`📊 DEBUG - Line Declaration Nr for invoice ${referanse}: "${lineDeclarationNr}" (type: ${typeof lineDeclarationNr})`);
+          
           if (lineDeclarationNr) {
-            matchedPdf = importData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(lineDeclarationNr));
+            matchedPdf = importData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(String(lineDeclarationNr)));
             if (matchedPdf) {
               console.log(`📎 Matched PDF by Line Declaration Nr (${lineDeclarationNr}): ${matchedPdf.filename} for invoice ${referanse}`);
+            } else {
+              console.log(`📎 No PDF match found for Line Declaration Nr (${lineDeclarationNr}) for invoice ${referanse}`);
+              console.log(`📎 Available PDF filenames: ${importData.pdfs.map(p => p.filename).slice(0, 5).join(', ')}...`);
             }
           }
           // Fallback: try to match by invoice reference
