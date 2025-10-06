@@ -44,16 +44,21 @@ module.exports = async (req, res) => {
     console.log('📋 Fields received:', Object.keys(fields));
 
     // Extract optional import_id and import_data for PDF chunk uploads
+    console.log('📋 DEBUG - Raw fields:', Object.keys(fields));
     const importIdField = Array.isArray(fields.import_id) ? fields.import_id[0] : fields.import_id;
     const importIdFromFields = importIdField ? String(importIdField) : null;
+    console.log('📋 DEBUG - import_id from fields:', importIdFromFields);
     const importDataField = Array.isArray(fields.import_data) ? fields.import_data[0] : fields.import_data;
     let importDataProvided = null;
     if (importDataField) {
       try {
         importDataProvided = typeof importDataField === 'string' ? JSON.parse(importDataField) : importDataField;
+        console.log('📋 DEBUG - import_data parsed successfully, has', importDataProvided?.invoices?.length, 'invoices');
       } catch (e) {
         console.warn('⚠️ Failed to parse import_data JSON:', e.message);
       }
+    } else {
+      console.log('📋 DEBUG - No import_data field received');
     }
 
     // Detect files

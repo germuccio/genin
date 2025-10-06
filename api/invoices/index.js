@@ -29,9 +29,38 @@ module.exports = async (req, res) => {
         console.log(`📋 Fetching invoices for import_id: ${import_id}`);
         
         try {
-          // Fetch draft invoices from Visma
-          const draftsResponse = await axios.get(`${apiBaseUrl}/v2/customerinvoicedrafts`, { headers });
-          const drafts = draftsResponse.data?.Data || [];
+          // Fetch draft invoices from Visma with pagination
+          let allDrafts = [];
+          let page = 0;
+          const pageSize = 50;
+          let hasMorePages = true;
+          
+          while (hasMorePages) {
+            const skip = page * pageSize;
+            const draftsResponse = await axios.get(
+              `${apiBaseUrl}/v2/customerinvoicedrafts?$orderby=Id&$skip=${skip}&$top=${pageSize}`, 
+              { headers }
+            );
+            
+            const pageDrafts = draftsResponse.data?.Data || [];
+            const totalResults = draftsResponse.data?.Meta?.TotalNumberOfResults || 0;
+            
+            console.log(`📋 Fetching page ${page + 1}: ${pageDrafts.length} drafts (Total: ${totalResults})`);
+            
+            if (pageDrafts.length > 0) {
+              allDrafts = allDrafts.concat(pageDrafts);
+              page++;
+              
+              if (allDrafts.length >= totalResults) {
+                hasMorePages = false;
+              }
+            } else {
+              hasMorePages = false;
+            }
+          }
+          
+          const drafts = allDrafts;
+          console.log(`📋 Total fetched: ${drafts.length} draft invoices`);
           
           // Filter drafts that might match this import (by reference or other criteria)
           const importDrafts = drafts.filter(draft => {
@@ -89,9 +118,38 @@ module.exports = async (req, res) => {
         console.log('📋 Fetching all available invoices from Visma');
         
         try {
-          // Fetch all draft invoices from Visma
-          const draftsResponse = await axios.get(`${apiBaseUrl}/v2/customerinvoicedrafts`, { headers });
-          const drafts = draftsResponse.data?.Data || [];
+          // Fetch all draft invoices from Visma with pagination
+          let allDrafts = [];
+          let page = 0;
+          const pageSize = 50;
+          let hasMorePages = true;
+          
+          while (hasMorePages) {
+            const skip = page * pageSize;
+            const draftsResponse = await axios.get(
+              `${apiBaseUrl}/v2/customerinvoicedrafts?$orderby=Id&$skip=${skip}&$top=${pageSize}`, 
+              { headers }
+            );
+            
+            const pageDrafts = draftsResponse.data?.Data || [];
+            const totalResults = draftsResponse.data?.Meta?.TotalNumberOfResults || 0;
+            
+            console.log(`📋 Fetching page ${page + 1}: ${pageDrafts.length} drafts (Total: ${totalResults})`);
+            
+            if (pageDrafts.length > 0) {
+              allDrafts = allDrafts.concat(pageDrafts);
+              page++;
+              
+              if (allDrafts.length >= totalResults) {
+                hasMorePages = false;
+              }
+            } else {
+              hasMorePages = false;
+            }
+          }
+          
+          const drafts = allDrafts;
+          console.log(`📋 Total fetched: ${drafts.length} draft invoices`);
           
           // Group drafts by import (using reference patterns)
           const importGroups = {};

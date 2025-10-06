@@ -113,14 +113,21 @@ module.exports = async (req, res) => {
             }
             
             if (lineDeclarationNr) {
-              matchedPdf = importDataLocal.pdfs.find(pdf => pdf.filename && pdf.filename.includes(String(lineDeclarationNr)));
+              // Use exact matching: compare line declaration number with filename (without .pdf extension)
+              const lineNumStr = String(lineDeclarationNr);
+              matchedPdf = importDataLocal.pdfs.find(pdf => {
+                if (!pdf.filename) return false;
+                const pdfNameWithoutExt = pdf.filename.replace(/\.pdf$/i, '');
+                return pdfNameWithoutExt === lineNumStr;
+              });
             }
-            // Fallback: try to match by invoice reference
-            if (!matchedPdf) {
+            // Fallback: try to match by invoice reference (only if no Line Declaration Nr exists)
+            if (!matchedPdf && !lineDeclarationNr) {
               matchedPdf = importDataLocal.pdfs.find(pdf => pdf.filename && pdf.filename.includes(referanse));
             }
-            // Last resort: try by index (original logic)
-            if (!matchedPdf && importDataLocal.pdfs[index]) {
+            // DISABLED: Index-based matching causes wrong PDF assignments
+            // Only use if there's NO Line Declaration Nr at all
+            if (!matchedPdf && !lineDeclarationNr && importDataLocal.pdfs[index]) {
               matchedPdf = importDataLocal.pdfs[index];
             }
           }

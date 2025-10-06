@@ -28,9 +28,9 @@
             @click="bulkDeleteDrafts" 
             class="btn btn-danger btn-sm" 
             :disabled="isDeletingDrafts"
-            title="Delete all draft invoices from Visma"
+            title="Delete all draft invoices from Visma (scans all pages)"
           >
-            <span v-if="isDeletingDrafts">Deleting...</span>
+            <span v-if="isDeletingDrafts">🔄 Deleting all pages...</span>
             <span v-else>🗑️ Delete All Drafts</span>
           </button>
           <button 
@@ -822,7 +822,7 @@ const sendInvoice = async (invoiceId: number | string) => {
 }
 
 const bulkDeleteDrafts = async () => {
-  if (!confirm('⚠️ This will DELETE ALL draft invoices from Visma. This action cannot be undone. Are you sure?')) {
+  if (!confirm('⚠️ This will DELETE ALL draft invoices from Visma across ALL PAGES. This action cannot be undone. Are you sure?')) {
     return
   }
 
@@ -830,13 +830,14 @@ const bulkDeleteDrafts = async () => {
   error.value = ''
   
   try {
+    console.log('🗑️ Starting bulk delete operation - fetching all pages...')
     const response = await axios.delete('/api/visma/invoices/bulk-delete-drafts')
     
     if (response.data.success) {
-      const { deleted, errors } = response.data
+      const { deleted, total, errors } = response.data
       
       if (deleted > 0) {
-        alert(`✅ Successfully deleted ${deleted} draft invoices from Visma!`)
+        alert(`✅ Successfully deleted ${deleted} draft invoices from Visma!${total > deleted ? `\n(Scanned ${total} invoices across multiple pages)` : ''}`)
         // Refresh the invoice list
         await loadInvoices()
       }

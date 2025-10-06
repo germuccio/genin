@@ -57,36 +57,72 @@ module.exports = async (req, res) => {
       'Content-Type': 'application/json'
     };
 
-    console.log('📍 Getting draft invoices from Visma...');
-    
-    // Get all draft invoices
-    const draftsResponse = await axios.get(`${apiBaseUrl}/v2/customerinvoicedrafts`, { headers });
-    const drafts = draftsResponse.data?.Data || [];
-    
-    console.log(`📍 Found ${drafts.length} draft invoices to delete`);
+    console.log('📍 Starting batch deletion process...');
     
     let deleted = 0;
     const errors = [];
-
-    // Delete each draft invoice
-    for (const draft of drafts) {
-      try {
-        await axios.delete(`${apiBaseUrl}/v2/customerinvoicedrafts/${draft.Id}`, { headers });
-        deleted++;
-        console.log(`✅ Deleted draft invoice: ${draft.Id}`);
-      } catch (deleteError) {
-        const errorMsg = `Failed to delete ${draft.Id}: ${deleteError.response?.data?.Message || deleteError.message}`;
-        errors.push(errorMsg);
-        console.error(`❌ ${errorMsg}`);
+    const pageSize = 50;
+    let hasMoreInvoices = true;
+    let batchNumber = 0;
+    
+    // Delete in batches: fetch first page, delete all, repeat until no more invoices
+    // This works because after deleting, the next invoices become the new "first page"
+    while (hasMoreInvoices) {
+      batchNumber++;
+      
+      // Always fetch the first page (skip=0) since we're deleting as we go
+      const draftsResponse = await axios.get(
+        `${apiBaseUrl}/v2/customerinvoicedrafts?$top=${pageSize}`, 
+        { headers }
+      );
+      
+      const drafts = draftsResponse.data?.Data || [];
+      const totalRemaining = draftsResponse.data?.Meta?.TotalNumberOfResults || 0;
+      
+      if (drafts.length === 0) {
+        console.log('📍 No more draft invoices found');
+        hasMoreInvoices = false;
+        break;
+      }
+      
+      console.log(`📍 Batch ${batchNumber}: Fetched ${drafts.length} drafts (${totalRemaining} total remaining in Visma)`);
+      
+      // Delete all invoices in this batch
+      for (const draft of drafts) {
+        try {
+          await axios.delete(`${apiBaseUrl}/v2/customerinvoicedrafts/${draft.Id}`, { headers });
+          deleted++;
+        } catch (deleteError) {
+          const statusCode = deleteError.response?.status;
+          // Ignore 404 (already deleted) and 400 (might be already deleted or invalid state)
+          if (statusCode === 404) {
+            console.log(`⚠️ Invoice ${draft.Id} already deleted (404), skipping`);
+            deleted++; // Count as successful since it's already gone
+          } else if (statusCode === 400) {
+            console.log(`⚠️ Invoice ${draft.Id} cannot be deleted (400), possibly already deleted`);
+            // Don't count as error since it might already be deleted
+          } else {
+            const errorMsg = `Failed to delete ${draft.Id}: ${deleteError.response?.data?.Message || deleteError.message}`;
+            errors.push(errorMsg);
+            console.error(`❌ ${errorMsg}`);
+          }
+        }
+      }
+      
+      console.log(`📊 Progress: ${deleted} total deleted so far`);
+      
+      // If we got fewer than requested, we're done
+      if (drafts.length < pageSize) {
+        hasMoreInvoices = false;
       }
     }
 
-    console.log(`📍 Bulk delete completed: ${deleted} deleted, ${errors.length} errors`);
+    console.log(`📍 Bulk delete completed: ${deleted} invoices deleted, ${errors.length} errors`);
     
     res.json({ 
       success: true, 
       deleted, 
-      total: drafts.length,
+      total: deleted,
       errors: errors.length > 0 ? errors : undefined
     });
     

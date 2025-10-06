@@ -115,34 +115,43 @@ module.exports = async (req, res) => {
           console.log(`📊 DEBUG - Line Declaration Nr for invoice ${referanse}: "${lineDeclarationNr}" (type: ${typeof lineDeclarationNr})`);
           
           if (lineDeclarationNr) {
-            matchedPdf = importData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(String(lineDeclarationNr)));
+            // Use exact matching: compare line declaration number with filename (without .pdf extension)
+            const lineNumStr = String(lineDeclarationNr);
+            matchedPdf = importData.pdfs.find(pdf => {
+              if (!pdf.filename) return false;
+              const pdfNameWithoutExt = pdf.filename.replace(/\.pdf$/i, '');
+              return pdfNameWithoutExt === lineNumStr;
+            });
             if (matchedPdf) {
               console.log(`📎 Matched PDF by Line Declaration Nr (${lineDeclarationNr}): ${matchedPdf.filename} for invoice ${referanse}`);
             } else {
               console.log(`📎 No PDF match found for Line Declaration Nr (${lineDeclarationNr}) for invoice ${referanse}`);
               console.log(`📎 Available PDF filenames: ${importData.pdfs.map(p => p.filename).slice(0, 5).join(', ')}...`);
+              
+              // Debug: Show similar filenames to help identify the issue
+              const similarPdfs = importData.pdfs.filter(pdf => {
+                const pdfNum = pdf.filename.replace(/\.pdf$/i, '');
+                return pdfNum.includes(lineNumStr.slice(0, 8)); // Match first 8 digits
+              });
+              if (similarPdfs.length > 0) {
+                console.log(`📎 Similar PDFs found: ${similarPdfs.map(p => p.filename).join(', ')}`);
+              }
             }
           }
-          // Fallback: try to match by invoice reference
-          if (!matchedPdf) {
+          // Fallback: try to match by invoice reference (only if no Line Declaration Nr exists)
+          if (!matchedPdf && !lineDeclarationNr) {
             matchedPdf = importData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(referanse));
             if (matchedPdf) {
               console.log(`📎 Matched PDF by reference (${referanse}): ${matchedPdf.filename} for invoice ${referanse}`);
             }
           }
-          // Last resort: try by index (original logic) - but only if no other invoice has claimed this PDF
-          // AND only if we haven't exceeded the available PDFs (to prevent wrong assignments)
-          if (!matchedPdf && importData.pdfs[index] && !importData.pdfs[index]._claimed) {
-            // Additional safety: only use index matching if the PDF filename doesn't seem to belong to another invoice
-            const pdfFilename = importData.pdfs[index].filename.replace('.pdf', '');
-            const seemsToMatchOtherInvoice = expectedLineDeclarations.includes(pdfFilename) && pdfFilename !== String(lineDeclarationNr);
-            
-            if (!seemsToMatchOtherInvoice) {
-              matchedPdf = importData.pdfs[index];
-              console.log(`📎 Matched PDF by index (${index}): ${matchedPdf.filename} for invoice ${referanse}`);
-            } else {
-              console.log(`📎 Skipped index matching for ${importData.pdfs[index].filename} - seems to belong to another invoice with Line Declaration Nr ${pdfFilename}`);
-            }
+          // DISABLED: Index-based matching is too unreliable and causes wrong PDF assignments
+          // If we have a Line Declaration Nr and exact match fails, the PDF is genuinely missing
+          // Do NOT fall back to index matching as it will assign wrong PDFs
+          if (!matchedPdf && !lineDeclarationNr && importData.pdfs[index] && !importData.pdfs[index]._claimed) {
+            // Only use index matching if there's NO Line Declaration Nr at all
+            matchedPdf = importData.pdfs[index];
+            console.log(`📎 Matched PDF by index (${index}): ${matchedPdf.filename} for invoice ${referanse} (no Line Declaration Nr available)`);
           }
           
           // Final fallback: if still no match and PDF is missing, log it clearly

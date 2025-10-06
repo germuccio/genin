@@ -406,7 +406,7 @@ app.post('/api/visma/create-test-invoice', async (req, res) => {
 // Direct invoice creation with PDF attachment
 app.post('/api/visma/invoices/create-direct', async (req, res) => {
   try {
-    const { import_id } = req.body;
+    const { import_id, processed_invoices } = req.body;
     
     if (!global.vismaTokens?.access_token) {
       return res.status(401).json({ 
@@ -423,8 +423,17 @@ app.post('/api/visma/invoices/create-direct', async (req, res) => {
 
     console.log(`🚀 Creating invoices directly for import ${import_id}...`);
 
-    // Get invoices from the import
-    const invoices = (global.invoices || []).filter((inv: any) => inv.import_id === import_id);
+    // CRITICAL FIX: Use processed_invoices from request body (chunked) instead of all invoices from import
+    // This prevents creating duplicates when frontend sends requests in chunks
+    let invoices;
+    if (processed_invoices && Array.isArray(processed_invoices) && processed_invoices.length > 0) {
+      invoices = processed_invoices;
+      console.log(`📦 Processing chunk with ${invoices.length} invoices (from request body)`);
+    } else {
+      // Fallback: Get all invoices from import (for non-chunked requests)
+      invoices = (global.invoices || []).filter((inv: any) => inv.import_id === import_id);
+      console.log(`📦 Processing all ${invoices.length} invoices for import ${import_id}`);
+    }
     
     if (invoices.length === 0) {
       return res.status(404).json({ error: `No invoices found for import ${import_id}` });
@@ -553,29 +562,42 @@ app.post('/api/visma/invoices/create-direct', async (req, res) => {
             console.log(`📎 Attaching PDF ${invoice.declaration_pdf.filename} to invoice ${invoiceId}...`);
             
             const fs = require('fs');
-            const FormData = require('form-data');
             const path = require('path');
             
             const pdfPath = path.resolve(invoice.declaration_pdf.path);
+            console.log(`🔍 DEBUG - PDF path: ${pdfPath}`);
+            console.log(`🔍 DEBUG - File exists: ${fs.existsSync(pdfPath)}`);
+            
             const pdfBuffer = fs.readFileSync(pdfPath);
+            console.log(`🔍 DEBUG - PDF buffer size: ${pdfBuffer.length} bytes`);
             
-            const formData = new FormData();
-            formData.append('file', pdfBuffer, {
-              filename: invoice.declaration_pdf.filename,
-              contentType: 'application/pdf'
-            });
-            formData.append('customerInvoiceDraftId', invoiceId);
+            // Convert PDF buffer to base64
+            const pdfBase64 = pdfBuffer.toString('base64');
             
-            await axios.post(`${apiBaseUrl}/v2/salesdocumentattachments/customerinvoicedraft`, formData, {
+            // Use the same format as Vercel: JSON with base64 content
+            const attachmentData = {
+              DockumentId: invoiceId, // Note: Visma uses "DockumentId" not "DocumentId"
+              DocumentType: 'CustomerInvoiceDraft',
+              FileName: invoice.declaration_pdf.filename,
+              FileSize: pdfBuffer.length,
+              ContentType: 'application/pdf',
+              Data: pdfBase64
+            };
+            
+            console.log(`🔍 DEBUG - Sending PDF attachment to Visma (${pdfBase64.length} base64 chars)...`);
+            await axios.post(`${apiBaseUrl}/v2/salesdocumentattachments`, attachmentData, {
               headers: {
                 'Authorization': `Bearer ${global.vismaTokens.access_token}`,
-                ...formData.getHeaders()
+                'Content-Type': 'application/json'
               }
             });
             
             console.log(`✅ PDF attachment successful for invoice ${invoiceId}`);
           } catch (attachError: any) {
-            console.warn(`⚠️ PDF attachment failed for invoice ${invoiceId}: ${attachError.response?.data?.DeveloperErrorMessage || attachError.message}`);
+            console.warn(`⚠️ PDF attachment failed for invoice ${invoiceId}: ${attachError.response?.data?.DeveloperErrorMessage || attachError.response?.data?.Message || attachError.message}`);
+            if (attachError.response?.data) {
+              console.log(`🔍 DEBUG - Full error response:`, JSON.stringify(attachError.response.data, null, 2));
+            }
           }
         }
 
@@ -739,15 +761,47 @@ app.post('/api/upload/files', upload.any(), async (req, res) => {
     const excelFile = files.find(f => /\.xlsx$|\.xls$/i.test(f.originalname));
     const pdfFiles = files.filter(f => /\.pdf$/i.test(f.originalname));
     
+    // Check if this is a PDF chunk upload (no Excel file, but has import_id)
+    const importIdFromBody = req.body?.import_id;
+    
+    if (!excelFile && importIdFromBody) {
+      // This is a PDF chunk upload - add PDFs to existing import
+      console.log(`📦 PDF chunk upload for import ${importIdFromBody} with ${pdfFiles.length} files`);
+      const existingImport = global.imports.find((imp: any) => imp.id === parseInt(importIdFromBody));
+      
+      if (!existingImport) {
+        return res.status(400).json({ error: `Import ${importIdFromBody} not found` });
+      }
+      
+      // Add new PDFs to existing import
+      const newPdfRecords = pdfFiles.map(pdf => ({
+        originalName: pdf.originalname,
+        path: pdf.path,
+        size: pdf.size
+      }));
+      
+      existingImport.pdf_files = [...existingImport.pdf_files, ...newPdfRecords];
+      console.log(`✅ Added ${pdfFiles.length} PDFs to import ${importIdFromBody}. Total: ${existingImport.pdf_files.length}`);
+      
+      return res.json({
+        import_id: existingImport.id,
+        filename: existingImport.filename,
+        status: 'completed',
+        total_rows: existingImport.total_rows,
+        valid_rows: existingImport.valid_rows,
+        errors: [],
+        pdf_files: existingImport.pdf_files.map((pdf: any) => ({
+          originalName: pdf.originalName,
+          size: pdf.size,
+          hasText: false
+        })),
+        message: `Added ${pdfFiles.length} PDFs. Total: ${existingImport.pdf_files.length} PDFs`
+      });
+    }
+    
     if (!excelFile) {
       console.log('❌ No Excel file found in upload');
       return res.status(400).json({ error: 'Excel file is required' });
-    }
-
-    if (!excelFile) {
-      return res.status(400).json({
-        error: 'Excel file is required'
-      });
     }
 
     console.log(`📁 Processing upload: ${excelFile.originalname}`);
@@ -1072,10 +1126,16 @@ app.post('/api/invoices/process-import', (req, res) => {
 
   console.log(`✅ Created ${processed} invoices from import ${import_id}`);
 
+  // Get the processed invoices for this specific import
+  const processedInvoices = global.invoices.filter(inv => inv.import_id === import_id);
+  
+  console.log(`📍 Returning ${processedInvoices.length} processed invoices to frontend`);
+
   res.json({
     success: true,
     processed: processed,
-    import_id: import_id
+    import_id: import_id,
+    processed_invoices: processedInvoices
   });
 });
 
@@ -1684,32 +1744,72 @@ app.delete('/api/visma/invoices/bulk-delete-drafts', async (req, res) => {
       'Content-Type': 'application/json'
     };
 
-    // Get all draft invoices
-    const draftsResponse = await axios.get(`${VISMA_API_BASE_URL}/v2/customerinvoicedrafts`, { headers });
-    const drafts = draftsResponse.data?.Data || [];
-    
-    console.log(`🗑️ Found ${drafts.length} draft invoices to delete`);
+    // Delete in batches: fetch first page, delete all, repeat until no more invoices
+    // This works because after deleting, the next invoices become the new "first page"
+    console.log('🗑️ Starting batch deletion process...');
     
     let deleted = 0;
     const errors: string[] = [];
-
-    // Delete each draft invoice
-    for (const draft of drafts) {
-      try {
-        await axios.delete(`${VISMA_API_BASE_URL}/v2/customerinvoicedrafts/${draft.Id}`, { headers });
-        deleted++;
-        console.log(`✅ Deleted draft invoice: ${draft.Id}`);
-      } catch (deleteError: any) {
-        const errorMsg = `Failed to delete ${draft.Id}: ${deleteError.response?.data?.Message || deleteError.message}`;
-        errors.push(errorMsg);
-        console.error(`❌ ${errorMsg}`);
+    const pageSize = 50;
+    let hasMoreInvoices = true;
+    let batchNumber = 0;
+    
+    while (hasMoreInvoices) {
+      batchNumber++;
+      
+      // Always fetch the first page (skip=0) since we're deleting as we go
+      const draftsResponse = await axios.get(
+        `${VISMA_API_BASE_URL}/v2/customerinvoicedrafts?$top=${pageSize}`, 
+        { headers }
+      );
+      
+      const drafts = draftsResponse.data?.Data || [];
+      const totalRemaining = draftsResponse.data?.Meta?.TotalNumberOfResults || 0;
+      
+      if (drafts.length === 0) {
+        console.log('🗑️ No more draft invoices found');
+        hasMoreInvoices = false;
+        break;
+      }
+      
+      console.log(`🗑️ Batch ${batchNumber}: Fetched ${drafts.length} drafts (${totalRemaining} total remaining in Visma)`);
+      
+      // Delete all invoices in this batch
+      for (const draft of drafts) {
+        try {
+          await axios.delete(`${VISMA_API_BASE_URL}/v2/customerinvoicedrafts/${draft.Id}`, { headers });
+          deleted++;
+        } catch (deleteError: any) {
+          const statusCode = deleteError.response?.status;
+          // Ignore 404 (already deleted) and 400 (might be already deleted or invalid state)
+          if (statusCode === 404) {
+            console.log(`⚠️ Invoice ${draft.Id} already deleted (404), skipping`);
+            deleted++; // Count as successful since it's already gone
+          } else if (statusCode === 400) {
+            console.log(`⚠️ Invoice ${draft.Id} cannot be deleted (400), possibly already deleted`);
+            // Don't count as error since it might already be deleted
+          } else {
+            const errorMsg = `Failed to delete ${draft.Id}: ${deleteError.response?.data?.Message || deleteError.message}`;
+            errors.push(errorMsg);
+            console.error(`❌ ${errorMsg}`);
+          }
+        }
+      }
+      
+      console.log(`📊 Progress: ${deleted} total deleted so far`);
+      
+      // If we got fewer than requested, we're done
+      if (drafts.length < pageSize) {
+        hasMoreInvoices = false;
       }
     }
+
+    console.log(`🗑️ Bulk delete completed: ${deleted} invoices deleted, ${errors.length} errors`);
 
     res.json({ 
       success: true, 
       deleted, 
-      total: drafts.length,
+      total: deleted,
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (error: any) {
