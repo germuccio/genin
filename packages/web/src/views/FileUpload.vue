@@ -536,8 +536,37 @@ const generateInvoicesDirect = async () => {
       const endIndex = Math.min(startIndex + chunkSize, allInvoices.length)
       const chunk = allInvoices.slice(startIndex, endIndex)
       
-      // Build subset PDF map for this chunk
-      const chunkPdfMap = buildChunkPdfMap(startIndex, chunk.length)
+      // Build subset PDF map for this chunk using exact matched filenames when available
+      const chunkPdfMap = (() => {
+        try {
+          const map = {} as Record<string, string>
+          // Prefer exact filenames from declaration_pdf on each processed invoice in this chunk
+          for (const inv of chunk) {
+            const fname = inv?.declaration_pdf?.filename
+            if (!fname) continue
+            // First try in-memory map captured during uploads
+            if (fullPdfContentMap && fullPdfContentMap[fname]) {
+              map[fname] = fullPdfContentMap[fname]
+              continue
+            }
+            // Fallback to localStorage persisted map
+            try {
+              const lsMap = JSON.parse(localStorage.getItem('pdfContentMap') || '{}')
+              if (lsMap && lsMap[fname]) {
+                map[fname] = lsMap[fname]
+                continue
+              }
+            } catch {}
+          }
+          // If nothing found by exact filenames, fall back to code-based subset builder
+          if (Object.keys(map).length === 0) {
+            return buildChunkPdfMap(startIndex, chunk.length)
+          }
+          return map
+        } catch {
+          return buildChunkPdfMap(startIndex, chunk.length)
+        }
+      })()
 
       generationProgress.value = { 
         current: 3, 
