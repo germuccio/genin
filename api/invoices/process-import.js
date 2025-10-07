@@ -208,6 +208,19 @@ module.exports = async (req, res) => {
 
     console.log(`📍 Process import completed: ${processed} processed, ${errors.length} errors`);
 
+    // CRITICAL: Store import data in global storage for Vercel PDF attachment recovery
+    if (!global.processedImports) {
+      global.processedImports = {};
+    }
+    global.processedImports[import_id] = {
+      invoices: importData.invoices,
+      pdfs: importData.pdfs || [],
+      timestamp: new Date().toISOString(),
+      filename: importData.filename,
+      total_count: importData.invoices?.length || 0
+    };
+    console.log(`📍 Stored ${importData.pdfs?.length || 0} PDFs in global storage for import ${import_id}`);
+
     // Get the processed invoices for this specific import
     const processedInvoices = global.invoices.filter(inv => inv.import_id === parseInt(import_id));
     
@@ -225,7 +238,15 @@ module.exports = async (req, res) => {
       errors: errors,
       message: `Processed ${processed} invoices from import ${import_id}`,
       // Return processed invoices for Vercel stateless environment
-      processed_invoices: processedInvoices
+      processed_invoices: processedInvoices,
+      // CRITICAL: Include full import data with PDFs for Vercel stateless recovery
+      _vercel_import_data: {
+        invoices: importData.invoices,
+        pdfs: importData.pdfs || [],
+        timestamp: new Date().toISOString(),
+        filename: importData.filename,
+        total_count: importData.invoices?.length || 0
+      }
     };
     
     console.log('📍 Sending response to frontend:', {

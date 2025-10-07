@@ -555,8 +555,8 @@ const generateInvoicesDirect = async () => {
         processed_invoices: chunk,
         pdf_content_map: chunkPdfMap,
         start_index: startIndex,
-        // Pass import data as fallback for Vercel stateless environment (only if available)
-        ...(uploadResult.value?._vercel_import_data && { import_data: uploadResult.value._vercel_import_data })
+        // CRITICAL: Use import data from process-import response (includes PDFs) instead of upload response
+        ...(processResp.data?._vercel_import_data && { import_data: processResp.data._vercel_import_data })
       }
       console.log('🔍 DEBUG: Chunk request payload size:', JSON.stringify(requestPayload).length, 'chars')
       

@@ -79,12 +79,22 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'import_id is required' });
     }
 
+    // Log what's available in global storage
+    console.log(`📍 DEBUG - global.processedImports available for import ${import_id}:`, 
+      global.processedImports && global.processedImports[import_id] ? 
+        `YES (${global.processedImports[import_id].pdfs?.length || 0} PDFs)` : 'NO');
+
     // PRIORITIZE import_data for Vercel (more reliable than processed_invoices)
     let importInvoices = [];
     
     // First, try to use import_data if available (Vercel preferred path)
     if (importDataLocal && Array.isArray(importDataLocal.invoices) && importDataLocal.invoices.length > 0) {
       console.log(`📍 Using import_data with ${importDataLocal.invoices.length} invoices (Vercel path)`);
+      console.log(`📍 import_data has ${importDataLocal.pdfs?.length || 0} PDFs available`);
+      if (importDataLocal.pdfs && importDataLocal.pdfs.length > 0) {
+        const withContent = importDataLocal.pdfs.filter(p => p.content).length;
+        console.log(`📍 PDFs with base64 content: ${withContent}/${importDataLocal.pdfs.length}`);
+      }
       importInvoices = importDataLocal.invoices
         .filter(invoice => {
           // Only process invoices with OK status (same logic as process-import)
