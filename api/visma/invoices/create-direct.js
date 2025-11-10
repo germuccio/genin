@@ -192,16 +192,15 @@ module.exports = async (req, res) => {
             }
             
             if (lineDeclarationNr) {
-              matchedPdf = storedData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(String(lineDeclarationNr)));
+              // Use ONLY exact matching - no fallbacks
+              const lineNumStr = String(lineDeclarationNr);
+              matchedPdf = storedData.pdfs.find(pdf => {
+                if (!pdf.filename) return false;
+                const pdfNameWithoutExt = pdf.filename.replace(/\.pdf$/i, '');
+                return pdfNameWithoutExt === lineNumStr;
+              });
             }
-            // Fallback: try to match by invoice reference
-            if (!matchedPdf) {
-              matchedPdf = storedData.pdfs.find(pdf => pdf.filename && pdf.filename.includes(referanse));
-            }
-            // Last resort: try by index (original logic)
-            if (!matchedPdf && storedData.pdfs[index]) {
-              matchedPdf = storedData.pdfs[index];
-            }
+            // No fallback matching - only exact declaration number match
           }
           
           return {
