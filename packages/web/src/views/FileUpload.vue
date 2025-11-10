@@ -527,8 +527,8 @@ const generateInvoicesDirect = async () => {
 
     // Process invoices in chunks to avoid 413 errors
     const allInvoices = processResp.data.processed_invoices
-    // Conservative chunk size for reliable processing with slow Visma API
-    // With 5 invoices per chunk: each invoice ~8-10s (with PDFs) = 40-50s per chunk (safe within 180s timeout)
+    // Optimized chunk size for Vercel Pro (300s limit) or local dev
+    // With 5 invoices per chunk: each invoice ~8-10s (with PDFs) = 40-50s per chunk (safe within 300s limit)
     const chunkSize = 5
     let totalSuccessful = 0
     let totalFailed = 0
