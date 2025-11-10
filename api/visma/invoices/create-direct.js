@@ -353,7 +353,7 @@ module.exports = async (req, res) => {
     
     // Add timeout tracking to prevent Vercel timeout
     const processingStartTime = Date.now();
-    const MAX_PROCESSING_TIME = 6000; // 6 seconds to leave even more buffer for Vercel's 10s limit
+    const MAX_PROCESSING_TIME = 270000; // 270 seconds (4.5 minutes) - leaves 30s buffer for Vercel's 300s (5 min) limit
     
     // Process only the current chunk
     for (let i = startIndex; i < endIndex; i++) {
