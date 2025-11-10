@@ -527,6 +527,8 @@ const generateInvoicesDirect = async () => {
 
     // Process invoices in chunks to avoid 413 errors
     const allInvoices = processResp.data.processed_invoices
+    // Conservative chunk size for reliable processing with slow Visma API
+    // With 5 invoices per chunk: each invoice ~8-10s (with PDFs) = 40-50s per chunk (safe within 180s timeout)
     const chunkSize = 5
     let totalSuccessful = 0
     let totalFailed = 0
@@ -589,27 +591,42 @@ const generateInvoicesDirect = async () => {
       }
       console.log('🔍 DEBUG: Chunk request payload size:', JSON.stringify(requestPayload).length, 'chars')
       
-      const directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload)
+      try {
+        // No timeout - let the backend complete processing regardless of how long it takes
+        // The backend will handle individual invoice timeouts, but we don't want to cut off successful processing
+        const directResp = await axios.post('/api/visma/invoices/create-direct', requestPayload, {
+          timeout: 0 // No timeout - wait as long as needed
+        })
 
-      totalSuccessful += directResp.data.summary?.successful || 0
-      totalFailed += directResp.data.summary?.failed || 0
-      lastProcessingInfo = directResp.data?.processing_info
-      
-      // Store customer not found invoices in localStorage
-      if (directResp.data.customer_not_found_invoices && directResp.data.customer_not_found_invoices.length > 0) {
-        try {
-          const existingNotFound = JSON.parse(localStorage.getItem('customerNotFoundInvoices') || '[]')
-          const newNotFound = directResp.data.customer_not_found_invoices
-          const combinedNotFound = [...existingNotFound, ...newNotFound]
-          // Deduplicate by referanse
-          const uniqueNotFound = combinedNotFound.filter((invoice, index, self) => 
-            index === self.findIndex(i => i.referanse === invoice.referanse)
-          )
-          localStorage.setItem('customerNotFoundInvoices', JSON.stringify(uniqueNotFound))
-          console.log(`🔍 DEBUG: Stored ${newNotFound.length} customer not found invoices in localStorage`)
-        } catch (err) {
-          console.warn('Failed to store customer not found invoices:', err)
+        totalSuccessful += directResp.data.summary?.successful || 0
+        totalFailed += directResp.data.summary?.failed || 0
+        lastProcessingInfo = directResp.data?.processing_info
+        
+        // Store customer not found invoices in localStorage
+        if (directResp.data.customer_not_found_invoices && directResp.data.customer_not_found_invoices.length > 0) {
+          try {
+            const existingNotFound = JSON.parse(localStorage.getItem('customerNotFoundInvoices') || '[]')
+            const newNotFound = directResp.data.customer_not_found_invoices
+            const combinedNotFound = [...existingNotFound, ...newNotFound]
+            // Deduplicate by referanse
+            const uniqueNotFound = combinedNotFound.filter((invoice, index, self) => 
+              index === self.findIndex(i => i.referanse === invoice.referanse)
+            )
+            localStorage.setItem('customerNotFoundInvoices', JSON.stringify(uniqueNotFound))
+            console.log(`🔍 DEBUG: Stored ${newNotFound.length} customer not found invoices in localStorage`)
+          } catch (err) {
+            console.warn('Failed to store customer not found invoices:', err)
+          }
         }
+      } catch (chunkError: any) {
+        console.error(`❌ Chunk ${Math.floor(startIndex/chunkSize) + 1} failed:`, chunkError.message)
+        if (chunkError.code === 'ECONNABORTED') {
+          console.error('⏱️  Request timed out. This chunk exceeded the timeout limit.')
+        }
+        // Count all invoices in failed chunk as failed
+        totalFailed += chunk.length
+        // Re-throw to stop processing if a chunk fails
+        throw new Error(`Chunk ${Math.floor(startIndex/chunkSize) + 1} failed: ${chunkError.message}`)
       }
       
       const remaining = allInvoices.length - endIndex

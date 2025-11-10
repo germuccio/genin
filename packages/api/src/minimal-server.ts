@@ -19,7 +19,7 @@ const parseCookies = (cookieHeader: string): Record<string, string> => {
   
   cookieHeader.split(';').forEach(cookie => {
     const parts = cookie.trim().split('=');
-    if (parts.length === 2) {
+    if (parts.length === 2 && parts[0] && parts[1]) {
       cookies[parts[0]] = decodeURIComponent(parts[1]);
     }
   });
@@ -201,7 +201,7 @@ app.post('/api/auth/login', (req, res) => {
   }
   const token = signSession({ sid: crypto.randomUUID(), iat: Date.now() });
   res.setHeader('Set-Cookie', `genin_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax`);
-  res.json({ success: true });
+  return res.json({ success: true });
 });
 
 app.post('/api/auth/logout', (_req, res) => {
@@ -265,7 +265,7 @@ app.get('/api/auth/visma/url', (req, res) => {
 });
 
 // Token exchange endpoint (what the frontend actually calls)
-app.get('/api/auth/visma/callback', async (req: Request, res: Response) => {
+app.get('/api/auth/visma/callback', async (req: express.Request, res: express.Response) => {
   const { code, state, error, error_description } = req.query;
 
   if (error) {
@@ -278,7 +278,7 @@ app.get('/api/auth/visma/callback', async (req: Request, res: Response) => {
   }
 
   try {
-    const tokenData = await vismaAuth.exchangeCodeForTokens(code as string);
+    const tokenData = await vismaAuth.exchangeCodeForToken(code as string);
     
     // Store tokens in a secure, HttpOnly cookie
     const cookiePayload = JSON.stringify(tokenData);
@@ -287,12 +287,12 @@ app.get('/api/auth/visma/callback', async (req: Request, res: Response) => {
     console.log('✅ Successfully exchanged code for tokens and stored in cookie');
 
     // Redirect to the setup page with a success flag
-    res.redirect(`/setup?auth=success`);
+    return res.redirect(`/setup?auth=success`);
 
   } catch (err: any) {
     console.error('❌ Failed to exchange code for token:', err.response?.data || err.message);
     const errorMessage = err.response?.data?.error_description || 'Token exchange failed';
-    res.redirect(`/setup?error=${encodeURIComponent(errorMessage)}`);
+    return res.redirect(`/setup?error=${encodeURIComponent(errorMessage)}`);
   }
 });
 
@@ -303,14 +303,14 @@ app.get('/api/auth/visma/status', async (req, res) => {
     const isConnected = !!(tokens && tokens.access_token);
     const apiMode = process.env.VISMA_API_ENVIRONMENT === 'production' ? 'LIVE' : 'TEST';
 
-    res.json({
+    return res.json({
       connected: isConnected,
       company: isConnected ? tokens.company_name : null,
       apiMode: apiMode,
     });
   } catch (error) {
     console.error('Error checking Visma status:', error);
-    res.status(500).json({ error: 'Failed to check status' });
+    return res.status(500).json({ error: 'Failed to check status' });
   }
 });
 
@@ -323,10 +323,10 @@ app.delete('/api/auth/visma/disconnect', async (req, res) => {
     // Also clear in-memory just in case, for consistency
     global.vismaTokens = null;
 
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('Error disconnecting from Visma:', error);
-    res.status(500).json({ error: 'Failed to disconnect' });
+    return res.status(500).json({ error: 'Failed to disconnect' });
   }
 });
 
@@ -384,7 +384,7 @@ app.post('/api/visma/create-test-invoice', async (req, res) => {
     
     const response = await axios.post(`${apiBaseUrl}/v2/customerinvoicedrafts`, invoiceData, { headers });
     
-    res.json({ 
+    return res.json({ 
       success: true, 
       invoiceId: response.data.Id,
       customer: testCustomer.Name,
@@ -395,7 +395,7 @@ app.post('/api/visma/create-test-invoice', async (req, res) => {
     const errMsg = error.response?.data?.DeveloperErrorMessage || error.response?.data?.Message || error.message;
     const status = error.response?.status;
     console.warn(`❌ Test invoice creation failed (HTTP ${status}): ${errMsg}`);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: `Test invoice creation failed: ${errMsg}`,
       status,
       details: error.response?.data
@@ -628,7 +628,7 @@ app.post('/api/visma/invoices/create-direct', async (req, res) => {
 
     console.log(`🎉 Direct invoice creation completed: ${successful} successful, ${failed} failed`);
 
-    res.json({
+    return res.json({
       success: true,
       message: `Created ${successful} invoice drafts directly (${failed} failed)`,
       results,
@@ -729,7 +729,7 @@ app.post('/api/visma/test-pdf-attachment/:invoiceId', async (req, res) => {
       results.push({ method: 'customerinvoices/attachments', status: 'failed', error: e.response?.status, message: e.response?.data?.DeveloperErrorMessage || e.message });
     }
     
-    res.json({ 
+    return res.json({ 
       success: true, 
       invoiceId,
       results,
@@ -739,7 +739,7 @@ app.post('/api/visma/test-pdf-attachment/:invoiceId', async (req, res) => {
     const errMsg = error.response?.data?.DeveloperErrorMessage || error.response?.data?.Message || error.message;
     const status = error.response?.status;
     console.warn(`❌ Test failed for invoice ${req.params.invoiceId} (HTTP ${status}): ${errMsg}`);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: `Test failed: ${errMsg}`,
       status,
       invoiceId: req.params.invoiceId,
@@ -847,7 +847,7 @@ app.post('/api/upload/files', upload.any(), async (req, res) => {
     fs.unlinkSync(excelFile.path);
     console.log(`📁 Kept ${pdfFiles.length} PDF files for invoice attachments`);
 
-    res.json({
+    return res.json({
       import_id: importRecord.id,
       filename: importRecord.filename,
       status: importRecord.status,
@@ -863,7 +863,7 @@ app.post('/api/upload/files', upload.any(), async (req, res) => {
 
   } catch (error: any) {
     console.error('Upload processing failed:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Failed to process uploaded files: ' + error.message
     });
   }
@@ -920,7 +920,7 @@ app.post('/api/invoices/presets', (req, res) => {
   global.presets.push(newPreset);
   console.log(`✅ Created preset: ${code} - ${name} (${unit_price_cents/100} ${currency})`);
   
-  res.json(newPreset);
+  return res.json(newPreset);
 });
 
 app.put('/api/invoices/presets/:id', (req, res) => {
@@ -944,7 +944,7 @@ app.put('/api/invoices/presets/:id', (req, res) => {
   
   console.log(`✅ Updated preset: ${global.presets[presetIndex].code} - ${global.presets[presetIndex].name}`);
   
-  res.json(global.presets[presetIndex]);
+  return res.json(global.presets[presetIndex]);
 });
 
 app.delete('/api/invoices/presets/:id', (req, res) => {
@@ -958,7 +958,7 @@ app.delete('/api/invoices/presets/:id', (req, res) => {
   const deletedPreset = global.presets.splice(presetIndex, 1)[0];
   console.log(`🗑️ Deleted preset: ${deletedPreset.code} - ${deletedPreset.name}`);
   
-  res.json({ success: true, deleted: deletedPreset });
+  return res.json({ success: true, deleted: deletedPreset });
 });
 
 // Process import endpoint
@@ -1131,7 +1131,7 @@ app.post('/api/invoices/process-import', (req, res) => {
   
   console.log(`📍 Returning ${processedInvoices.length} processed invoices to frontend`);
 
-  res.json({
+  return res.json({
     success: true,
     processed: processed,
     import_id: import_id,
@@ -1231,7 +1231,7 @@ app.post('/api/invoices/validate-for-visma', async (req, res) => {
     const hasInvalid = validationResults.some(r => r.status === 'invalid');
     const hasWarnings = validationResults.some(r => r.status === 'warning') || warnings.length > 0;
 
-    res.json({
+    return res.json({
       valid: !hasInvalid,
       has_warnings: hasWarnings,
       total_invoices: draftInvoices.length,
@@ -1248,7 +1248,7 @@ app.post('/api/invoices/validate-for-visma', async (req, res) => {
 
   } catch (error: any) {
     console.error('❌ Validation error:', error.response?.data || error.message);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: 'Validation failed',
       details: error.response?.data?.DeveloperErrorMessage || error.message,
       valid: false
@@ -1269,10 +1269,10 @@ app.get('/api/visma/termsofpayments', async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
-    res.json({ items: termsResp.data?.Data ?? [] });
+    return res.json({ items: termsResp.data?.Data ?? [] });
   } catch (error: any) {
     console.error('❌ Failed to load TermsOfPayments:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to load TermsOfPayments' });
+    return res.status(500).json({ error: 'Failed to load TermsOfPayments' });
   }
 });
 
@@ -1527,7 +1527,7 @@ app.post('/api/invoices/create-in-visma', async (req, res) => {
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
       created: created,
       errors: errors,
@@ -1536,7 +1536,7 @@ app.post('/api/invoices/create-in-visma', async (req, res) => {
 
   } catch (error: any) {
     console.error('Failed to create invoices in Visma:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Failed to create invoices in Visma: ' + error.message
     });
   }
@@ -1590,7 +1590,7 @@ app.get('/callback', async (req, res) => {
 });
 
 // New endpoint to get all articles from Visma
-app.get('/api/articles', async (req: Request, res: Response) => {
+app.get('/api/articles', async (req: express.Request, res: express.Response) => {
   try {
     const tokens = getVismaTokens(req);
 
@@ -1605,15 +1605,15 @@ app.get('/api/articles', async (req: Request, res: Response) => {
       }
     });
     
-    res.json(response.data.Data || []);
+    return res.json(response.data.Data || []);
   } catch (error: any) {
     console.error('❌ Failed to fetch articles:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to fetch articles' });
+    return res.status(500).json({ error: 'Failed to fetch articles' });
   }
 });
 
 // New endpoint to create dedicated transport service articles
-app.post('/api/articles/create-transport-articles', async (req: Request, res: Response) => {
+app.post('/api/articles/create-transport-articles', async (req: express.Request, res: express.Response) => {
   try {
     const tokens = getVismaTokens(req);
     if (!tokens || !tokens.access_token) {
@@ -1659,7 +1659,7 @@ app.post('/api/articles/create-transport-articles', async (req: Request, res: Re
       }
 
       // Determine next article number
-      const articleNumbers = existingArticles.map((a: any) => parseInt(a.Number)).filter(n => !isNaN(n));
+      const articleNumbers = existingArticles.map((a: any) => parseInt(a.Number)).filter((n: number) => !isNaN(n));
       if (articleNumbers.length > 0) {
         nextArticleNumber = Math.max(...articleNumbers) + 1;
       }
@@ -1702,10 +1702,10 @@ app.post('/api/articles/create-transport-articles', async (req: Request, res: Re
       console.log(`✅ Created OK transport article: ${okPreset.article_name} (ID: ${okResponse.data.Id}, Number: ${okArticleData.Number})`);
     }
 
-    res.json({ success: true, created: createdArticles });
+    return res.json({ success: true, created: createdArticles });
   } catch (error: any) {
     console.error('❌ Failed to create transport articles:', error.response?.data || error.message);
-    res.status(500).json({ success: false, error: 'Failed to create transport articles' });
+    return res.status(500).json({ success: false, error: 'Failed to create transport articles' });
   }
 });
 
@@ -1717,14 +1717,14 @@ app.delete('/api/invoices/clear-local', (req, res) => {
     
     console.log(`🗑️ Cleared ${count} local invoices from memory`);
     
-    res.json({
+    return res.json({
       success: true,
       message: `Cleared ${count} local invoices`,
       cleared: count
     });
   } catch (error: any) {
     console.error('❌ Error clearing local invoices:', error.message);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: error.message 
     });
@@ -1806,7 +1806,7 @@ app.delete('/api/visma/invoices/bulk-delete-drafts', async (req, res) => {
 
     console.log(`🗑️ Bulk delete completed: ${deleted} invoices deleted, ${errors.length} errors`);
 
-    res.json({ 
+    return res.json({ 
       success: true, 
       deleted, 
       total: deleted,
@@ -1814,7 +1814,7 @@ app.delete('/api/visma/invoices/bulk-delete-drafts', async (req, res) => {
     });
   } catch (error: any) {
     console.error('❌ Error during bulk delete:', error.response?.data || error.message);
-    res.status(500).json({ success: false, error: 'Failed to delete draft invoices' });
+    return res.status(500).json({ success: false, error: 'Failed to delete draft invoices' });
   }
 });
 
@@ -1866,7 +1866,7 @@ app.get('/api/articles/mapping-status', async (req, res) => {
     
     const recommended = transportArticles[0];
     
-    res.json({
+    return res.json({
       success: true,
       transportArticles: transportArticles.map((a: any) => ({
         id: a.Id,
@@ -1882,25 +1882,31 @@ app.get('/api/articles/mapping-status', async (req, res) => {
     
   } catch (error: any) {
     console.error('❌ Error getting article mapping status:', error.response?.data || error.message);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: error.response?.data?.Message || error.message 
     });
   }
 });
 
-// Get terms of payment
+// Get terms of payment (duplicate endpoint - kept for backwards compatibility)
 app.get('/api/visma/termsofpayments', async (req, res) => {
   try {
     const tokens = getVismaTokens(req);
     if (!tokens || !tokens.access_token) {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
-    const terms = await vismaAuth.getTermsOfPayment(tokens.access_token);
-    res.json(terms);
+    const apiBaseUrl = VISMA_API_BASE_URL;
+    const termsResp = await axios.get(`${apiBaseUrl}/v2/termsofpayments`, {
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.json({ items: termsResp.data?.Data ?? [] });
   } catch (error: any) {
     console.error('❌ Failed to get terms of payment:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to get terms of payment' });
+    return res.status(500).json({ error: 'Failed to get terms of payment' });
   }
 });
 
