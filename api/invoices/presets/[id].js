@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
         id: presetId,
         code: code || 'OK',
         name: name || 'Norsk import (+mva)',
-        unit_price_cents: unit_price_cents ? parseInt(unit_price_cents) : 41400,
+        unit_price_cents: unit_price_cents ? parseInt(unit_price_cents) : 42500,
         currency: currency || 'NOK',
         vat_code: vat_code || '25',
         article_name: article_name || name || 'Norsk import (+mva)'
@@ -67,7 +67,7 @@ module.exports = async (req, res) => {
           code: 'OK',
           name: 'Norsk import (+mva)',
           article_name: 'Norsk import (+mva)',
-          unit_price_cents: 41400,
+          unit_price_cents: 42500,
           currency: 'NOK',
           vat_code: '25'
         };

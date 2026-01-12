@@ -478,7 +478,7 @@ const createInvoicesInVisma = async () => {
         code: 'OK',
         name: 'Norsk import (+mva)',
         article_name: 'Norsk import (+mva)',
-        unit_price_cents: 41400,
+        unit_price_cents: 42500,
         currency: 'NOK',
         vat_code: '25'
       }]
@@ -670,7 +670,7 @@ const continueProcessing = async () => {
         code: 'OK',
         name: 'Norsk import (+mva)',
         article_name: 'Norsk import (+mva)',
-        unit_price_cents: 41400,
+        unit_price_cents: 42500,
         currency: 'NOK',
         vat_code: '25'
       }]

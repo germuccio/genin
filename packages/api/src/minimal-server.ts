@@ -887,7 +887,7 @@ if (!global.presets) {
       id: 1,
       code: 'OK',
       name: 'Norsk import (+mva)',
-      unit_price_cents: 41400, // 414 NOK
+      unit_price_cents: 42500, // 425 NOK
       currency: 'NOK',
       vat_code: '25',
       article_name: 'Norsk import (+mva)'

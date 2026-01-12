@@ -63,11 +63,11 @@ module.exports = async (req, res) => {
     
     const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices, import_data, pdf_content_map, presets } = req.body;
 
-    // Get preset for pricing (default to OK preset with 414 NOK if not provided)
+    // Get preset for pricing (default to OK preset with 425 NOK if not provided)
     const okPreset = (presets && Array.isArray(presets))
       ? presets.find(p => p.code === 'OK')
       : null;
-    const unitPrice = okPreset ? (okPreset.unit_price_cents / 100) : 414;
+    const unitPrice = okPreset ? (okPreset.unit_price_cents / 100) : 425;
     const vatRate = okPreset ? parseInt(okPreset.vat_code) : 25;
 
     console.log('📍 Parsed request data:', {
