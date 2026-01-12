@@ -516,7 +516,29 @@ const generateInvoicesDirect = async () => {
       try { return JSON.parse(localStorage.getItem('customerOverrides') || '{}') } catch { return {} }
     })()
 
-    console.log('Creating invoices directly with config:', { articleMapping, customerDefaults, customerOverrides })
+    // Load presets from localStorage to ensure backend uses the updated pricing
+    const presets = (() => {
+      try {
+        const stored = localStorage.getItem('pricing_presets')
+        if (stored) {
+          return JSON.parse(stored)
+        }
+      } catch (error) {
+        console.error('Failed to load presets from localStorage:', error)
+      }
+      // Return default preset if nothing in localStorage
+      return [{
+        id: 1,
+        code: 'OK',
+        name: 'Norsk import (+mva)',
+        article_name: 'Norsk import (+mva)',
+        unit_price_cents: 41400,
+        currency: 'NOK',
+        vat_code: '25'
+      }]
+    })()
+
+    console.log('Creating invoices directly with config:', { articleMapping, customerDefaults, customerOverrides, presets })
     console.log('🔍 DEBUG: processResp.data.processed_invoices:', processResp.data.processed_invoices)
     console.log('🔍 DEBUG: uploadResult.value?._vercel_import_data:', uploadResult.value?._vercel_import_data)
 
@@ -581,6 +603,7 @@ const generateInvoicesDirect = async () => {
       const requestPayload = {
         import_id: uploadResult.value?.import_id,
         articleMapping,
+        presets,
         customerDefaults,
         customerOverrides,
         processed_invoices: chunk,
