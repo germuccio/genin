@@ -462,9 +462,34 @@ const createInvoicesInVisma = async () => {
     // Load pdf content map if available (for attachments)
     const pdfContentMap = (() => { try { return JSON.parse(localStorage.getItem('pdfContentMap') || '{}') } catch { return {} } })()
 
+    // Load presets from localStorage to ensure backend uses the updated pricing
+    const presets = (() => {
+      try {
+        const stored = localStorage.getItem('pricing_presets')
+        if (stored) {
+          return JSON.parse(stored)
+        }
+      } catch (error) {
+        console.error('Failed to load presets from localStorage:', error)
+      }
+      // Return default preset if nothing in localStorage
+      return [{
+        id: 1,
+        code: 'OK',
+        name: 'Norsk import (+mva)',
+        article_name: 'Norsk import (+mva)',
+        unit_price_cents: 41400,
+        currency: 'NOK',
+        vat_code: '25'
+      }]
+    })()
+
+    console.log('📋 Loaded presets from localStorage:', presets)
+
     const requestData = {
       import_id: import_id,
       articleMapping: articleMapping,
+      presets: presets, // Pass presets for pricing
       customerDefaults: customerDefaults.value,
       customerOverrides: perCustomerOverrides.value,
       // Pass processed invoices for Vercel stateless environment
@@ -632,11 +657,35 @@ const continueProcessing = async () => {
       } catch { return pdfContentMap2 }
     }
 
+    // Load presets from localStorage for continue processing as well
+    const presetsForContinue = (() => {
+      try {
+        const stored = localStorage.getItem('pricing_presets')
+        if (stored) return JSON.parse(stored)
+      } catch (error) {
+        console.error('Failed to load presets from localStorage:', error)
+      }
+      return [{
+        id: 1,
+        code: 'OK',
+        name: 'Norsk import (+mva)',
+        article_name: 'Norsk import (+mva)',
+        unit_price_cents: 41400,
+        currency: 'NOK',
+        vat_code: '25'
+      }]
+    })()
+
+    // Load saved article mapping
+    const savedMapping = localStorage.getItem('articleMapping')
+    const articleMappingForContinue = savedMapping ? JSON.parse(savedMapping) : { ok: '69f95c2e-255d-4836-9df1-3a4961bc417b' }
+
     const continueRequest = {
       start_index: processingInfo.value.next_start_index,
       import_id: processingInfo.value.import_id || Date.now().toString(), // Use stored import_id
       // Include all the same data as the original request
-      articleMapping: { ok: '69f95c2e-255d-4836-9df1-3a4961bc417b' }, // This should come from the original request
+      articleMapping: articleMappingForContinue,
+      presets: presetsForContinue, // Pass presets for pricing
       customerDefaults: customerDefaults.value,
       customerOverrides: perCustomerOverrides.value,
       // Provide data again in case server had a cold start

@@ -61,15 +61,25 @@ module.exports = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated with Visma' });
     }
     
-    const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices, import_data, pdf_content_map } = req.body;
-    console.log('📍 Parsed request data:', { 
-      import_id, 
-      articleMapping, 
-      customerDefaults, 
-      customerOverrides, 
+    const { import_id, articleMapping, customerDefaults, customerOverrides, processed_invoices, import_data, pdf_content_map, presets } = req.body;
+
+    // Get preset for pricing (default to OK preset with 414 NOK if not provided)
+    const okPreset = (presets && Array.isArray(presets))
+      ? presets.find(p => p.code === 'OK')
+      : null;
+    const unitPrice = okPreset ? (okPreset.unit_price_cents / 100) : 414;
+    const vatRate = okPreset ? parseInt(okPreset.vat_code) : 25;
+
+    console.log('📍 Parsed request data:', {
+      import_id,
+      articleMapping,
+      customerDefaults,
+      customerOverrides,
       processed_invoices: processed_invoices ? `${processed_invoices.length} invoices` : 'none',
       import_data: import_data ? `Available with ${import_data.invoices?.length || 0} invoices` : 'none',
-      pdf_content_map_keys: pdf_content_map ? Object.keys(pdf_content_map).length : 0
+      pdf_content_map_keys: pdf_content_map ? Object.keys(pdf_content_map).length : 0,
+      presets: presets ? `${presets.length} presets` : 'none',
+      pricing: { unitPrice, vatRate }
     });
     
     // Work with a mutable copy for fallbacks below
@@ -447,7 +457,7 @@ module.exports = async (req, res) => {
               status: 'CUSTOMER_NOT_FOUND',
               error: `Customer "${customerName}" not found in Visma`,
               visma_id: null,
-              amount: (invoice.total_cents || 41400) / 100 // Default to 414 if not set
+              amount: unitPrice // Use preset unit price
             });
             
             // Store in global results for invoice list to access
@@ -456,7 +466,7 @@ module.exports = async (req, res) => {
               mottaker: customerName,
               status: 'CUSTOMER_NOT_FOUND',
               customer_validation_status: 'NOT_FOUND',
-              amount: (invoice.total_cents || 41400) / 100, // Default to 414 if not set
+              amount: unitPrice, // Default to 414 if not set
               filename: importInvoices[0]?.filename || 'Unknown'
             };
             console.log(`📋 DEBUG: Stored CUSTOMER_NOT_FOUND result for ${invoice.referanse}:`, global.lastProcessingResults[invoice.referanse]);
@@ -475,7 +485,7 @@ module.exports = async (req, res) => {
             const customerNotFoundInvoice = {
               referanse: invoice.referanse,
               mottaker: customerName,
-              amount: (invoice.total_cents || 41400) / 100,
+              amount: unitPrice,
               filename: importInvoices[0]?.filename || 'Unknown',
               error: `Customer "${customerName}" not found in Visma`
             };
@@ -521,8 +531,8 @@ module.exports = async (req, res) => {
               ArticleId: articleId,
               Description: `Transport service - ${invoice.referanse}`,
               Quantity: 1,
-              UnitPrice: 414, // Use preset price from UI setup (like local deployment)
-              VatRate: 25, // Standard Norwegian VAT
+              UnitPrice: unitPrice, // Use preset price from localStorage
+              VatRate: vatRate, // Use VAT rate from preset
               LineNumber: 1,
               IsWorkCost: false,
               EligibleForReverseChargeOnVat: false,
@@ -556,7 +566,7 @@ module.exports = async (req, res) => {
               mottaker: customerName,
               status: 'CREATED_AS_DRAFT',
               visma_id: invoiceResp.data.Id,
-              amount: (invoice.total_cents || 41400) / 100, // Default to 414 if not set
+              amount: unitPrice, // Use preset unit price
               pdf_attached: false
             });
             
@@ -566,7 +576,7 @@ module.exports = async (req, res) => {
               mottaker: customerName,
               status: 'CREATED_AS_DRAFT',
               customer_validation_status: 'FOUND',
-              amount: (invoice.total_cents || 41400) / 100, // Default to 414 if not set
+              amount: unitPrice, // Default to 414 if not set
               visma_id: invoiceResp.data.Id,
               filename: importInvoices[0]?.filename || 'Unknown'
             };
@@ -752,8 +762,8 @@ module.exports = async (req, res) => {
             referanse: failedResult.referanse,
             mottaker: originalInvoice.mottaker,
             avsender: originalInvoice.avsender || 'Genin',
-            total_cents: originalInvoice.total_cents || Math.round((originalInvoice.amount || 414) * 100),
-            unit_price: originalInvoice.amount || 414,
+            total_cents: originalInvoice.total_cents || Math.round(unitPrice * 100),
+            unit_price: originalInvoice.amount || unitPrice,
             currency: originalInvoice.currency || 'NOK',
             status: 'FAILED',
             error_message: failedResult.error,
