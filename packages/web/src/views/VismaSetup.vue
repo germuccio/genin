@@ -444,12 +444,48 @@ const testConnection = async () => {
   }
 }
 
+// LocalStorage helpers for presets
+const PRESETS_STORAGE_KEY = 'pricing_presets'
+
+const loadPresetsFromLocalStorage = (): Preset[] => {
+  try {
+    const stored = localStorage.getItem(PRESETS_STORAGE_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch (error) {
+    console.error('Failed to load presets from localStorage:', error)
+  }
+
+  // Return default preset if nothing in localStorage
+  return [
+    {
+      id: 1,
+      code: 'OK',
+      name: 'Norsk import (+mva)',
+      article_name: 'Norsk import (+mva)',
+      unit_price_cents: 41400,
+      currency: 'NOK',
+      vat_code: '25'
+    }
+  ]
+}
+
+const savePresetsToLocalStorage = (presetsToSave: Preset[]) => {
+  try {
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presetsToSave))
+  } catch (error) {
+    console.error('Failed to save presets to localStorage:', error)
+  }
+}
+
 const loadPresets = async () => {
   isLoadingPresets.value = true
-  
+
   try {
-    const response = await axios.get('/api/invoices/presets')
-    presets.value = response.data
+    // Load from localStorage instead of API
+    presets.value = loadPresetsFromLocalStorage()
+    console.log('Loaded presets from localStorage:', presets.value)
   } catch (error) {
     console.error('Failed to load presets:', error)
   } finally {
@@ -467,16 +503,17 @@ const cancelEdit = () => {
 
 const savePreset = async () => {
   if (!editingPreset.value) return
-  
+
   try {
-    const response = await axios.put(`/api/invoices/presets/${editingPreset.value.id}`, editingPreset.value)
-    
     // Update the preset in the list
     const index = presets.value.findIndex(p => p.id === editingPreset.value!.id)
     if (index !== -1) {
-      presets.value[index] = response.data
+      presets.value[index] = { ...editingPreset.value }
     }
-    
+
+    // Save to localStorage
+    savePresetsToLocalStorage(presets.value)
+
     editingPreset.value = null
     console.log('Preset updated successfully')
   } catch (error) {
@@ -487,12 +524,14 @@ const savePreset = async () => {
 
 const deletePreset = async (presetId: number) => {
   if (!confirm('Are you sure you want to delete this preset?')) return
-  
+
   try {
-    await axios.delete(`/api/invoices/presets/${presetId}`)
-    
     // Remove from local list
     presets.value = presets.value.filter(p => p.id !== presetId)
+
+    // Save to localStorage
+    savePresetsToLocalStorage(presets.value)
+
     console.log('Preset deleted successfully')
   } catch (error) {
     console.error('Failed to delete preset:', error)
@@ -522,13 +561,25 @@ const createPreset = async () => {
     alert('Please fill in all required fields (Code, Name, Unit Price)')
     return
   }
-  
+
   try {
-    const response = await axios.post('/api/invoices/presets', newPreset.value)
-    
+    // Generate new ID (max existing ID + 1)
+    const maxId = presets.value.length > 0
+      ? Math.max(...presets.value.map(p => p.id))
+      : 0
+
+    const presetToAdd = {
+      ...newPreset.value,
+      id: maxId + 1,
+      unit_price_cents: parseInt(newPreset.value.unit_price_cents.toString())
+    }
+
     // Add to local list
-    presets.value.push(response.data)
-    
+    presets.value.push(presetToAdd)
+
+    // Save to localStorage
+    savePresetsToLocalStorage(presets.value)
+
     showNewPresetForm.value = false
     console.log('Preset created successfully')
   } catch (error) {
